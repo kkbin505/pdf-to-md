@@ -48,7 +48,6 @@ export default class PDFToMDPlugin extends Plugin {
       'openai': 'OPENAI_API_KEY',
       'qwen': 'DASHSCOPE_API_KEY',
       'gemini': 'GEMINI_API_KEY',
-      'custom': 'CUSTOM_API_KEY',
     };
 
     for (const [provider, envVar] of Object.entries(envVars)) {
@@ -80,15 +79,12 @@ export default class PDFToMDPlugin extends Plugin {
   private async convertPdf(file: TFile) {
     try {
       // Check if API key is configured
-      const isLocal = this.settings.provider === 'ollama' || this.settings.provider === 'lmstudio';
-      const apiKey = isLocal ? 'local' : this.getApiKey(this.settings.provider);
+      const apiKey = this.getApiKey(this.settings.provider);
       if (!apiKey) {
         const envVar = this.settings.provider === 'openai' ? 'OPENAI_API_KEY' : 
-                       this.settings.provider === 'qwen' ? 'DASHSCOPE_API_KEY' : 
-                       this.settings.provider === 'gemini' ? 'GEMINI_API_KEY' : 'CUSTOM_API_KEY';
+                       this.settings.provider === 'qwen' ? 'DASHSCOPE_API_KEY' : 'GEMINI_API_KEY';
         const providerName = this.settings.provider === 'openai' ? 'OpenAI' :
-                             this.settings.provider === 'qwen' ? 'Alibaba Qwen' :
-                             this.settings.provider === 'gemini' ? 'Google Gemini' : 'Custom';
+                             this.settings.provider === 'qwen' ? 'Alibaba Qwen' : 'Google Gemini';
 
         new Notice(
           `❌ ${providerName} API Key not configured!\n\nPlease set environment variable: ${envVar}\n\nThen restart Obsidian.`,
@@ -184,10 +180,6 @@ export default class PDFToMDPlugin extends Plugin {
     const settings = this.settings;
     const selectedModel = MODEL_OPTIONS.find(m => m.id === settings.selectedModelId) || MODEL_OPTIONS[0];
 
-    if (selectedModel.id === 'custom') {
-      return settings.customModelName || 'custom';
-    }
-    
     if (selectedModel.provider === 'openai') {
       return selectedModel.apiModel;
     }
@@ -207,7 +199,7 @@ export default class PDFToMDPlugin extends Plugin {
   private createProvider(apiKey: string): ModelProvider {
     const settings = this.settings;
     const selectedModel = MODEL_OPTIONS.find(m => m.id === settings.selectedModelId) || MODEL_OPTIONS[0];
-    const modelName = selectedModel.id === 'custom' ? settings.customModelName : selectedModel.apiModel;
+    const modelName = selectedModel.apiModel;
 
     switch (settings.provider) {
       case 'openai':
@@ -235,33 +227,6 @@ export default class PDFToMDPlugin extends Plugin {
             model: modelName,
           },
           'https://generativelanguage.googleapis.com/v1beta/openai/'
-        );
-
-      case 'ollama':
-        return new OpenAICompatibleProvider(
-          {
-            apiKey: '',
-            model: settings.customModelName || 'llava',
-          },
-          settings.customBaseUrl || 'http://localhost:11434/v1'
-        );
-
-      case 'lmstudio':
-        return new OpenAICompatibleProvider(
-          {
-            apiKey: '',
-            model: settings.customModelName || 'custom',
-          },
-          settings.customBaseUrl || 'http://localhost:1234/v1'
-        );
-
-      case 'custom':
-        return new OpenAICompatibleProvider(
-          {
-            apiKey: apiKey,
-            model: settings.customModelName,
-          },
-          settings.customBaseUrl
         );
 
       default:

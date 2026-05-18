@@ -18632,10 +18632,7 @@ var MODEL_OPTIONS = [
   { id: "gemini-2.5-pro", name: "Google Gemini 2.5 Pro", provider: "gemini", apiModel: "gemini-2.5-pro" },
   { id: "qwen-vl-max", name: "Alibaba Qwen VL Max (\u5343\u95EE)", provider: "qwen", apiModel: "qwen-vl-max" },
   { id: "qwen-vl-plus", name: "Alibaba Qwen VL Plus (\u5343\u95EE)", provider: "qwen", apiModel: "qwen-vl-plus" },
-  { id: "qwen-vl-max-latest", name: "Alibaba Qwen VL Max Latest (\u5343\u95EE)", provider: "qwen", apiModel: "qwen-vl-max-latest" },
-  { id: "ollama", name: "Ollama (local)", provider: "ollama", apiModel: "llava" },
-  { id: "lmstudio", name: "LMStudio (local)", provider: "lmstudio", apiModel: "custom" },
-  { id: "custom", name: "Custom OpenAI-compatible", provider: "custom", apiModel: "" }
+  { id: "qwen-vl-max-latest", name: "Alibaba Qwen VL Max Latest (\u5343\u95EE)", provider: "qwen", apiModel: "qwen-vl-max-latest" }
 ];
 var DEFAULT_SETTINGS = {
   provider: "qwen",
@@ -18720,16 +18717,6 @@ var PDFToMDSettingTab = class extends import_obsidian.PluginSettingTab {
       case "gemini":
         this.addProviderSetting("Google Gemini API Key Status", "Get from Google AI Studio / Generative AI console", "GEMINI_API_KEY");
         break;
-      case "ollama":
-        this.addLocalProviderSettings("Ollama", "http://localhost:11434/v1", "llava");
-        break;
-      case "lmstudio":
-        this.addLocalProviderSettings("LMStudio", "http://localhost:1234/v1", "custom");
-        break;
-      case "custom":
-        this.addProviderSetting("Custom API Key Status", "Configure environment variable: `CUSTOM_API_KEY`", "CUSTOM_API_KEY");
-        this.addCustomUrlAndModelSettings();
-        break;
     }
   }
   addProviderSetting(keyLabel, keyDesc, envVarName) {
@@ -18744,28 +18731,6 @@ var PDFToMDSettingTab = class extends import_obsidian.PluginSettingTab {
 
 Please set the environment variable and restart Obsidian.`, 5e3);
       }
-    })));
-  }
-  addLocalProviderSettings(providerName, defaultUrl, defaultModel) {
-    const { containerEl } = this;
-    new import_obsidian.Setting(containerEl).setName(`${providerName} Base URL`).setDesc(`Local API endpoint URL (default: ${defaultUrl})`).addText((text) => text.setPlaceholder(defaultUrl).setValue(this.plugin.settings.customBaseUrl || "").onChange((value) => __async(this, null, function* () {
-      this.plugin.settings.customBaseUrl = value;
-      yield this.plugin.saveSettings();
-    })));
-    new import_obsidian.Setting(containerEl).setName(`${providerName} Model Name`).setDesc(`Name of the local VLM model (default: ${defaultModel})`).addText((text) => text.setPlaceholder(defaultModel).setValue(this.plugin.settings.customModelName || "").onChange((value) => __async(this, null, function* () {
-      this.plugin.settings.customModelName = value;
-      yield this.plugin.saveSettings();
-    })));
-  }
-  addCustomUrlAndModelSettings() {
-    const { containerEl } = this;
-    new import_obsidian.Setting(containerEl).setName("Custom Base URL").setDesc("OpenAI-compatible API base URL (e.g., https://api.deepseek.com/v1)").addText((text) => text.setPlaceholder("https://api.example.com/v1").setValue(this.plugin.settings.customBaseUrl || "").onChange((value) => __async(this, null, function* () {
-      this.plugin.settings.customBaseUrl = value;
-      yield this.plugin.saveSettings();
-    })));
-    new import_obsidian.Setting(containerEl).setName("Custom Model Name").setDesc("Specific model name to call (e.g., deepseek-chat)").addText((text) => text.setPlaceholder("model-name").setValue(this.plugin.settings.customModelName || "").onChange((value) => __async(this, null, function* () {
-      this.plugin.settings.customModelName = value;
-      yield this.plugin.saveSettings();
     })));
   }
   getEnvValue(envVarName) {
@@ -18984,8 +18949,7 @@ var PDFToMDPlugin = class extends import_obsidian2.Plugin {
     const envVars = {
       "openai": "OPENAI_API_KEY",
       "qwen": "DASHSCOPE_API_KEY",
-      "gemini": "GEMINI_API_KEY",
-      "custom": "CUSTOM_API_KEY"
+      "gemini": "GEMINI_API_KEY"
     };
     for (const [provider, envVar] of Object.entries(envVars)) {
       const value = this.getEnvValue(envVar);
@@ -19012,11 +18976,10 @@ var PDFToMDPlugin = class extends import_obsidian2.Plugin {
   convertPdf(file) {
     return __async(this, null, function* () {
       try {
-        const isLocal = this.settings.provider === "ollama" || this.settings.provider === "lmstudio";
-        const apiKey = isLocal ? "local" : this.getApiKey(this.settings.provider);
+        const apiKey = this.getApiKey(this.settings.provider);
         if (!apiKey) {
-          const envVar = this.settings.provider === "openai" ? "OPENAI_API_KEY" : this.settings.provider === "qwen" ? "DASHSCOPE_API_KEY" : this.settings.provider === "gemini" ? "GEMINI_API_KEY" : "CUSTOM_API_KEY";
-          const providerName = this.settings.provider === "openai" ? "OpenAI" : this.settings.provider === "qwen" ? "Alibaba Qwen" : this.settings.provider === "gemini" ? "Google Gemini" : "Custom";
+          const envVar = this.settings.provider === "openai" ? "OPENAI_API_KEY" : this.settings.provider === "qwen" ? "DASHSCOPE_API_KEY" : "GEMINI_API_KEY";
+          const providerName = this.settings.provider === "openai" ? "OpenAI" : this.settings.provider === "qwen" ? "Alibaba Qwen" : "Google Gemini";
           new import_obsidian2.Notice(`\u274C ${providerName} API Key not configured!
 
 Please set environment variable: ${envVar}
@@ -19092,9 +19055,6 @@ Then restart Obsidian.`, 1e4);
   getModelDisplayName() {
     const settings = this.settings;
     const selectedModel = MODEL_OPTIONS.find((m) => m.id === settings.selectedModelId) || MODEL_OPTIONS[0];
-    if (selectedModel.id === "custom") {
-      return settings.customModelName || "custom";
-    }
     if (selectedModel.provider === "openai") {
       return selectedModel.apiModel;
     }
@@ -19112,7 +19072,7 @@ Then restart Obsidian.`, 1e4);
   createProvider(apiKey) {
     const settings = this.settings;
     const selectedModel = MODEL_OPTIONS.find((m) => m.id === settings.selectedModelId) || MODEL_OPTIONS[0];
-    const modelName = selectedModel.id === "custom" ? settings.customModelName : selectedModel.apiModel;
+    const modelName = selectedModel.apiModel;
     switch (settings.provider) {
       case "openai":
         return new OpenAICompatibleProvider({
@@ -19129,21 +19089,6 @@ Then restart Obsidian.`, 1e4);
           apiKey,
           model: modelName
         }, "https://generativelanguage.googleapis.com/v1beta/openai/");
-      case "ollama":
-        return new OpenAICompatibleProvider({
-          apiKey: "",
-          model: settings.customModelName || "llava"
-        }, settings.customBaseUrl || "http://localhost:11434/v1");
-      case "lmstudio":
-        return new OpenAICompatibleProvider({
-          apiKey: "",
-          model: settings.customModelName || "custom"
-        }, settings.customBaseUrl || "http://localhost:1234/v1");
-      case "custom":
-        return new OpenAICompatibleProvider({
-          apiKey,
-          model: settings.customModelName
-        }, settings.customBaseUrl);
       default:
         throw new Error(`Unknown provider: ${settings.provider}`);
     }

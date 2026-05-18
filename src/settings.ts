@@ -4,7 +4,7 @@ import PDFToMDPlugin from '../main';
 export interface ModelOption {
   id: string;
   name: string;
-  provider: 'openai' | 'qwen' | 'gemini' | 'ollama' | 'lmstudio' | 'custom';
+  provider: 'openai' | 'qwen' | 'gemini';
   apiModel: string;
 }
 
@@ -22,13 +22,10 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: 'qwen-vl-max', name: 'Alibaba Qwen VL Max (千问)', provider: 'qwen', apiModel: 'qwen-vl-max' },
   { id: 'qwen-vl-plus', name: 'Alibaba Qwen VL Plus (千问)', provider: 'qwen', apiModel: 'qwen-vl-plus' },
   { id: 'qwen-vl-max-latest', name: 'Alibaba Qwen VL Max Latest (千问)', provider: 'qwen', apiModel: 'qwen-vl-max-latest' },
-  { id: 'ollama', name: 'Ollama (local)', provider: 'ollama', apiModel: 'llava' },
-  { id: 'lmstudio', name: 'LMStudio (local)', provider: 'lmstudio', apiModel: 'custom' },
-  { id: 'custom', name: 'Custom OpenAI-compatible', provider: 'custom', apiModel: '' },
 ];
 
 export interface PDFToMDSettings {
-  provider: 'openai' | 'qwen' | 'gemini' | 'ollama' | 'lmstudio' | 'custom';
+  provider: 'openai' | 'qwen' | 'gemini';
   selectedModelId: string;
   openaiModel: string;
   qwenModel: string;
@@ -201,20 +198,6 @@ export class PDFToMDSettingTab extends PluginSettingTab {
           'GEMINI_API_KEY'
         );
         break;
-      case 'ollama':
-        this.addLocalProviderSettings('Ollama', 'http://localhost:11434/v1', 'llava');
-        break;
-      case 'lmstudio':
-        this.addLocalProviderSettings('LMStudio', 'http://localhost:1234/v1', 'custom');
-        break;
-      case 'custom':
-        this.addProviderSetting(
-          'Custom API Key Status',
-          'Configure environment variable: `CUSTOM_API_KEY`',
-          'CUSTOM_API_KEY'
-        );
-        this.addCustomUrlAndModelSettings();
-        break;
     }
   }
 
@@ -249,70 +232,6 @@ export class PDFToMDSettingTab extends PluginSettingTab {
                 5000
               );
             }
-          })
-      );
-  }
-
-  private addLocalProviderSettings(
-    providerName: string,
-    defaultUrl: string,
-    defaultModel: string
-  ): void {
-    const { containerEl } = this;
-
-    new Setting(containerEl)
-      .setName(`${providerName} Base URL`)
-      .setDesc(`Local API endpoint URL (default: ${defaultUrl})`)
-      .addText(text =>
-        text
-          .setPlaceholder(defaultUrl)
-          .setValue(this.plugin.settings.customBaseUrl || '')
-          .onChange(async value => {
-            this.plugin.settings.customBaseUrl = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName(`${providerName} Model Name`)
-      .setDesc(`Name of the local VLM model (default: ${defaultModel})`)
-      .addText(text =>
-        text
-          .setPlaceholder(defaultModel)
-          .setValue(this.plugin.settings.customModelName || '')
-          .onChange(async value => {
-            this.plugin.settings.customModelName = value;
-            await this.plugin.saveSettings();
-          })
-      );
-  }
-
-  private addCustomUrlAndModelSettings(): void {
-    const { containerEl } = this;
-
-    new Setting(containerEl)
-      .setName('Custom Base URL')
-      .setDesc('OpenAI-compatible API base URL (e.g., https://api.deepseek.com/v1)')
-      .addText(text =>
-        text
-          .setPlaceholder('https://api.example.com/v1')
-          .setValue(this.plugin.settings.customBaseUrl || '')
-          .onChange(async value => {
-            this.plugin.settings.customBaseUrl = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName('Custom Model Name')
-      .setDesc('Specific model name to call (e.g., deepseek-chat)')
-      .addText(text =>
-        text
-          .setPlaceholder('model-name')
-          .setValue(this.plugin.settings.customModelName || '')
-          .onChange(async value => {
-            this.plugin.settings.customModelName = value;
-            await this.plugin.saveSettings();
           })
       );
   }

@@ -14,7 +14,7 @@ An all-in-one Obsidian plugin that converts handwritten PDFs to Markdown in a si
 
 **Key Features:**
 - 📄 Right-click any PDF → "Convert to Markdown"
-- 🤖 Support for GPT-4o, GPT-5.4, Alibaba Qwen (千问), Google Gemini, local models (Ollama/LMStudio), and custom OpenAI-compatible endpoints
+- 🤖 Support for GPT-4o, GPT-5.4, Alibaba Qwen (千问), and Google Gemini
 - 📊 Real-time progress tracking with visual progress bar
 - 🔐 Secure API key management (read-only environment variables check)
 - ⚙️ Configurable DPI, timeout, retry, and file conflict handling
@@ -78,7 +78,7 @@ source ~/.bashrc  # or source ~/.zshrc
 **2️⃣ Select AI Provider**
 
 Open Obsidian Settings → PDF to Markdown:
-- Select the AI model directly from the unified **Model** dropdown (supporting various GPT-4o, GPT-5.4, Qwen, Gemini, and Local/Custom models).
+- Select the AI model directly from the unified **Model** dropdown (supporting various GPT-4o, GPT-5.4, Qwen, and Gemini models).
 
 **3️⃣ Convert PDF**
 
@@ -102,7 +102,14 @@ Output: my_notes_qwen.md         (if using Qwen)
 
 ### GPT
 
-![pdf](example/qwen.jpg)
+![pdf](example\qwen.jpg)
+
+### Supported AI Models
+
+| Provider | Model | Cost/Page | Speed | Quality |
+|---|---|---|---|---|
+| **Alibaba Qwen** 🏆 | qwen-vl-max | ¥0.00345 | 15-30s | Excellent |
+| **OpenAI** | gpt-5.4-mini | $0.003 | 5-10s | Excellent+ |
 
 ### Plugin Settings
 
@@ -141,7 +148,7 @@ While studying control theory, I fell in love with the handwriting experience of
 I developed this plugin to solve that problem. It leverages powerful Vision Language Models (**Qwen-VL**, **GPT-4o/GPT-5.4**, and **Gemini**) to provide:
 - **Accurate Mixed Recognition:** Seamlessly handles text and complex formulas
 - **LaTeX Math Formulas:** Converts equations into clear Obsidian-renderable LaTeX ($...$ and $$...$$)
-- **Cost-Effective & Flexible:** Choose cheap, fast, local, or ultra-accurate models inside Obsidian
+- **Cost-Effective & Flexible:** Choose cheap, fast, or ultra-accurate models inside Obsidian
 
 ---
 

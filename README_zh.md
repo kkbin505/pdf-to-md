@@ -12,7 +12,7 @@
 
 **核心功能：**
 - 📄 右键 PDF → "Convert to Markdown"
-- 🤖 支持 GPT-4o, GPT-5.4, 阿里千问 (Qwen), 谷歌 Gemini, 本地模型 (Ollama/LMStudio) 以及自定义 OpenAI 兼容接口
+- 🤖 支持 GPT-4o, GPT-5.4, 阿里千问 (Qwen) 以及谷歌 Gemini
 - 📊 实时进度提示，显示转换状态和耗时
 - 🔐 API Key 安全管理（只读环境变量检测）
 - ⚙️ 可配置 DPI、超时、重试、文件冲突处理
@@ -76,7 +76,7 @@ source ~/.bashrc  # 或 source ~/.zshrc
 **2️⃣ 选择 AI 模型**
 
 打开 Obsidian 设置 → PDF to Markdown：
-- 在统一的 **Model** 下拉菜单中直接选择你想要使用的模型（支持各种 GPT-4o、GPT-5.4、千问、Gemini 以及本地/自定义模型）。
+- 在统一的 **Model** 下拉菜单中直接选择你想要使用的模型（支持各种 GPT-4o、GPT-5.4、千问以及 Gemini 模型）。
 
 **3️⃣ 转换 PDF**
 
@@ -137,7 +137,7 @@ source ~/.bashrc  # 或 source ~/.zshrc
 为了解决这个痛点，我开发了这个插件。基于 **千问-VL**、**GPT-4o/GPT-5.4** 和 **Gemini**，实现：
 - **混合排版精准识别**：完美处理文字与复杂公式的混合
 - **LaTeX 数学公式**：将方程式转换为清晰的 LaTeX 代码（`$...$` 和 `$$...$$`），在 Obsidian 中直接完美渲染
-- **灵活与低成本**：在 Obsidian 内部一键切换超高性价比（千问 ¥0.00345/页）、极速云端或完全免费的本地模型
+- **灵活与低成本**：在 Obsidian 内部一键切换超高性价比（千问 ¥0.00345/页）或极速云端模型
 
 ---
 
@@ -163,7 +163,7 @@ source ~/.bashrc  # 或 source ~/.zshrc
 
 ### Q: 插件提示"API Key not configured"？
 **A:** API Key 没有从环境变量中读取到。检查：
-- ✓ 环境变量是否正确设置（`DASHSCOPE_API_KEY`、`OPENAI_API_KEY`、`GEMINI_API_KEY`、`CUSTOM_API_KEY`）
+- ✓ 环境变量是否正确设置（`DASHSCOPE_API_KEY`、`OPENAI_API_KEY`、`GEMINI_API_KEY`）
 - ✓ 重启了 Obsidian 吗？（必须完全重启，不只是刷新插件）
 - ✓ 变量名是否拼写正确（区分大小写）
 
