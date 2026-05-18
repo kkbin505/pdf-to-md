@@ -1,0 +1,50 @@
+# Environment variables (security)
+.env
+.env.local
+.env.*.local
+
+# Python (legacy)
+__pycache__/
+*.pyc
+venv/
+.venv/
+build/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build outputs (Obsidian plugin) - KEEP THESE for plugin distribution
+# main.js         <- Needed for Obsidian plugin submission
+# main.d.ts       <- Needed for TypeScript types
+# pdf.worker.min.js <- Needed for PDF.js worker
+
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime/Cache
+*.log
+.obsidian/
+data.json
+
+# Test/Temp files
+optimalcontrolHW3.pdf
+optimalcontrolHW3.md
+PLAN.md
+ENV_SETUP.md
+RELEASE_GUIDE.md
+page1.jpg
+snap.jpg
+example/Scratch_Claude.md
+example/claude.jpg
