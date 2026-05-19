@@ -1,7 +1,5 @@
+import { requestUrl } from 'obsidian';
 import { ModelProvider, ProviderConfig } from './base';
-
-// Import requestUrl from Obsidian
-declare const app: any;
 
 export class OpenAICompatibleProvider implements ModelProvider {
   private apiKey: string;
@@ -11,7 +9,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
   constructor(config: ProviderConfig, baseUrl: string) {
     this.apiKey = config.apiKey;
     this.model = config.model;
-    this.baseUrl = baseUrl;
+    this.baseUrl = baseUrl.replace(/\/$/, '');
   }
 
   async recognize(imageBase64: string): Promise<string> {
@@ -37,36 +35,6 @@ export class OpenAICompatibleProvider implements ModelProvider {
       max_completion_tokens: 2000,
     };
 
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (this.apiKey) {
-        headers['Authorization'] = `Bearer ${this.apiKey}`;
-      }
-
-      // Use Obsidian's requestUrl to bypass CORS
-      const response = await (window as any).app.vault?.adapter?.request?.({
-        url: `${this.baseUrl}/chat/completions`,
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify(payload),
-      });
-
-      if (!response) {
-        // Fallback to regular fetch if requestUrl not available
-        return await this.fetchWithRegularFetch(payload);
-      }
-
-      const data = JSON.parse(response);
-      return data.choices[0].message.content;
-    } catch (error) {
-      // Fallback to regular fetch
-      return await this.fetchWithRegularFetch(payload);
-    }
-  }
-
-  private async fetchWithRegularFetch(payload: any): Promise<string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -74,19 +42,20 @@ export class OpenAICompatibleProvider implements ModelProvider {
       headers['Authorization'] = `Bearer ${this.apiKey}`;
     }
 
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/chat/completions`,
       method: 'POST',
-      headers: headers,
+      headers,
       body: JSON.stringify(payload),
+      throw: false,
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`API Error: ${error.error?.message || response.statusText}`);
+    if (response.status >= 400) {
+      const msg = response.json?.error?.message ?? response.text;
+      throw new Error(`API Error ${response.status}: ${msg}`);
     }
 
-    const data = await response.json();
-    return data.choices[0].message.content;
+    return response.json.choices[0].message.content;
   }
 
   private getPrompt(): string {
