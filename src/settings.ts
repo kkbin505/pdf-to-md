@@ -69,7 +69,7 @@ export class PDFToMDSettingTab extends PluginSettingTab {
         <strong>🔒 Security:</strong> API keys are read from environment variables only.
         <strong>No API keys are stored on disk.</strong>
         <br/>
-        <small>See <a href="https://github.com/kkbin505/pdf-to-md/tree/main/obsidian">documentation</a> for setup instructions.</small>
+        <small>See <a href="https://github.com/kkbin505/pdf-to-md">documentation</a> for setup instructions.</small>
       </div>
     `;
 

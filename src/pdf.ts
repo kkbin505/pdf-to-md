@@ -19,6 +19,7 @@ export async function pdfToImages(pdfData: ArrayBuffer, dpi: number = 200): Prom
     }
 
     await page.render({
+      canvas: canvas,
       canvasContext: context,
       viewport: viewport,
     }).promise;

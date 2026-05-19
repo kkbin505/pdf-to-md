@@ -10,12 +10,8 @@ export default class PDFToMDPlugin extends Plugin {
   private apiKeys: Map<string, string> = new Map();  // Store API keys in memory
 
   private setupPdfWorker() {
-    // Use CDN as primary source (most reliable in Obsidian)
-    // This is the official PDF.js CDN which should work
     pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-    console.log('✓ PDF worker configured to use CDN');
+      'https://unpkg.com/pdfjs-dist@5.7.284/build/pdf.worker.min.mjs';
   }
 
   async onload() {

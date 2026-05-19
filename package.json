@@ -1,6 +1,6 @@
 {
   "name": "pdf-to-md",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Convert handwritten PDFs to Markdown with LaTeX formulas in Obsidian",
   "main": "main.js",
   "types": "main.d.ts",
@@ -15,13 +15,12 @@
     "@types/node": "^16.11.6",
     "@typescript-eslint/eslint-plugin": "5.2.0",
     "@typescript-eslint/parser": "5.2.0",
-    "builtin-modules": "3.2.0",
     "esbuild": "0.13.12",
     "obsidian": "latest",
     "tslib": "2.4.0",
     "typescript": "4.7.4"
   },
   "dependencies": {
-    "pdfjs-dist": "^3.11.174"
+    "pdfjs-dist": "5.7.284"
   }
 }
