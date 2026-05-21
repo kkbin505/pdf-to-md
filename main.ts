@@ -37,7 +37,7 @@ export default class PDFToMDPlugin extends Plugin {
             item
               .setTitle('Convert to Markdown')
               .setIcon('file-text')
-              .setSection('pdf-to-md')
+              .setSection('action')
               .onClick(() => this.convertFile(file))
           );
         } else if (supportedImageExtensions.includes(file.extension.toLowerCase())) {
