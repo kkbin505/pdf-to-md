@@ -76,6 +76,7 @@ export default class PDFToMDPlugin extends Plugin {
             await this.convertImageInNote(img, src);
           })
       );
+      menu.addSeparator();
 
       menu.showAtPosition({ x: event.clientX, y: event.clientY });
     }, true);

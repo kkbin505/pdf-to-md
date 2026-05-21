@@ -27905,6 +27905,7 @@ var PDFToMDPlugin = class extends import_obsidian4.Plugin {
       menu.addItem((item) => item.setTitle("Convert Image to Markdown").setIcon("image").onClick(async () => {
         await this.convertImageInNote(img, src);
       }));
+      menu.addSeparator();
       menu.showAtPosition({ x: event.clientX, y: event.clientY });
     }, true);
   }
