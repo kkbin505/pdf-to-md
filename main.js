@@ -27647,7 +27647,7 @@ Please set the environment variable and restart Obsidian.`, 5e3);
   }
 };
 
-// src/pdf.ts
+// src/image.ts
 async function pdfToImages(pdfData, dpi = 200) {
   const pdf = await getDocument({ data: pdfData }).promise;
   const images = [];
@@ -27725,6 +27725,25 @@ var PDFConverter = class {
       }
     }
     throw lastError || new Error(`Failed to recognize page ${pageNum} after ${this.maxRetries} attempts`);
+  }
+  async convertImageBuffer(imageData) {
+    try {
+      this.emitProgress(0, 1, "Converting image...");
+      const imageBase64 = this.arrayBufferToBase64(imageData);
+      const result = await this.recognizeWithRetry(imageBase64, 1);
+      this.emitProgress(1, 1, "Done");
+      return result;
+    } catch (error) {
+      throw new Error(`Image conversion failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
   }
   withTimeout(promise, ms) {
     return Promise.race([
@@ -27863,9 +27882,14 @@ var PDFToMDPlugin = class extends import_obsidian4.Plugin {
     await this.loadSettings();
     this.loadApiKeysFromEnv();
     this.addSettingTab(new PDFToMDSettingTab(this.app, this));
+    const supportedImageExtensions = ["png", "jpg", "jpeg", "webp"];
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
-      if (file instanceof import_obsidian4.TFile && file.extension === "pdf") {
-        menu.addItem((item) => item.setTitle("Convert to Markdown").setIcon("file-text").onClick(() => this.convertPdf(file)));
+      if (file instanceof import_obsidian4.TFile) {
+        if (file.extension === "pdf") {
+          menu.addItem((item) => item.setTitle("Convert to Markdown").setIcon("file-text").onClick(() => this.convertFile(file)));
+        } else if (supportedImageExtensions.includes(file.extension.toLowerCase())) {
+          menu.addItem((item) => item.setTitle("Convert Image to Markdown").setIcon("image").onClick(() => this.convertFile(file)));
+        }
       }
     }));
   }
@@ -27898,8 +27922,14 @@ var PDFToMDPlugin = class extends import_obsidian4.Plugin {
   getApiKey(provider) {
     return this.apiKeys.get(provider) || null;
   }
-  async convertPdf(file) {
+  async convertFile(file) {
     try {
+      const isPdf = file.extension === "pdf";
+      const isImage = ["png", "jpg", "jpeg", "webp"].includes(file.extension.toLowerCase());
+      if (!isPdf && !isImage) {
+        new import_obsidian4.Notice("\u274C Unsupported file type. Only PDF, PNG, JPG, JPEG, and WebP are supported.", 5e3);
+        return;
+      }
       const apiKey = this.getApiKey(this.settings.provider);
       if (!apiKey) {
         const envVarMap = {
@@ -27924,9 +27954,8 @@ Then restart Obsidian.`, 1e4);
         console.error(`API Key missing. Environment variable: ${envVar}`);
         return;
       }
-      const notice = new import_obsidian4.Notice("Starting PDF conversion...", 0);
+      const notice = new import_obsidian4.Notice(`Starting ${isPdf ? "PDF" : "Image"} conversion...`, 0);
       const data = await this.app.vault.readBinary(file);
-      const pdfBuffer = data;
       const provider = this.createProvider(apiKey);
       const converter = new PDFConverter(provider, {
         timeout: this.settings.timeout * 1e3,
@@ -27941,7 +27970,12 @@ Then restart Obsidian.`, 1e4);
 [${progress.current}/${progress.total}] ${elapsed}s`;
         notice.setMessage(message);
       });
-      const markdown = await converter.convertPdfBuffer(pdfBuffer, this.settings.dpi);
+      let markdown;
+      if (isPdf) {
+        markdown = await converter.convertPdfBuffer(data, this.settings.dpi);
+      } else {
+        markdown = await converter.convertImageBuffer(data);
+      }
       const outputPath = this.getOutputPath(file);
       const existingFile = this.app.vault.getAbstractFileByPath(outputPath);
       if (existingFile && this.settings.conflictResolution === "skip") {
@@ -27968,7 +28002,8 @@ Then restart Obsidian.`, 1e4);
     }
   }
   getOutputPath(file) {
-    const basePath = file.path.replace(".pdf", "");
+    const ext = file.extension === "pdf" ? ".pdf" : `.${file.extension}`;
+    const basePath = file.path.replace(ext, "");
     const baseName = basePath.split("/").pop() || "output";
     const dir = basePath.substring(0, basePath.length - baseName.length);
     switch (this.settings.conflictResolution) {

@@ -26,15 +26,26 @@ export default class PDFToMDPlugin extends Plugin {
 
     this.addSettingTab(new PDFToMDSettingTab(this.app, this));
 
+    const supportedImageExtensions = ['png', 'jpg', 'jpeg', 'webp'];
+
     this.registerEvent(
       this.app.workspace.on('file-menu', (menu, file) => {
-        if (file instanceof TFile && file.extension === 'pdf') {
-          menu.addItem(item =>
-            item
-              .setTitle('Convert to Markdown')
-              .setIcon('file-text')
-              .onClick(() => this.convertPdf(file))
-          );
+        if (file instanceof TFile) {
+          if (file.extension === 'pdf') {
+            menu.addItem(item =>
+              item
+                .setTitle('Convert to Markdown')
+                .setIcon('file-text')
+                .onClick(() => this.convertFile(file))
+            );
+          } else if (supportedImageExtensions.includes(file.extension.toLowerCase())) {
+            menu.addItem(item =>
+              item
+                .setTitle('Convert Image to Markdown')
+                .setIcon('image')
+                .onClick(() => this.convertFile(file))
+            );
+          }
         }
       })
     );
@@ -74,8 +85,16 @@ export default class PDFToMDPlugin extends Plugin {
     return this.apiKeys.get(provider) || null;
   }
 
-  private async convertPdf(file: TFile) {
+  private async convertFile(file: TFile) {
     try {
+      const isPdf = file.extension === 'pdf';
+      const isImage = ['png', 'jpg', 'jpeg', 'webp'].includes(file.extension.toLowerCase());
+
+      if (!isPdf && !isImage) {
+        new Notice('❌ Unsupported file type. Only PDF, PNG, JPG, JPEG, and WebP are supported.', 5000);
+        return;
+      }
+
       // Check if API key is configured
       const apiKey = this.getApiKey(this.settings.provider);
       if (!apiKey) {
@@ -102,10 +121,9 @@ export default class PDFToMDPlugin extends Plugin {
         return;
       }
 
-      const notice = new Notice('Starting PDF conversion...', 0);
+      const notice = new Notice(`Starting ${isPdf ? 'PDF' : 'Image'} conversion...`, 0);
 
       const data = await this.app.vault.readBinary(file);
-      const pdfBuffer = data;
 
       const provider = this.createProvider(apiKey);
       const converter = new PDFConverter(provider, {
@@ -124,7 +142,12 @@ export default class PDFToMDPlugin extends Plugin {
         notice.setMessage(message);
       });
 
-      const markdown = await converter.convertPdfBuffer(pdfBuffer, this.settings.dpi);
+      let markdown: string;
+      if (isPdf) {
+        markdown = await converter.convertPdfBuffer(data, this.settings.dpi);
+      } else {
+        markdown = await converter.convertImageBuffer(data);
+      }
 
       // Determine output path based on conflict resolution strategy
       const outputPath = this.getOutputPath(file);
@@ -163,7 +186,8 @@ export default class PDFToMDPlugin extends Plugin {
   }
 
   private getOutputPath(file: TFile): string {
-    const basePath = file.path.replace('.pdf', '');
+    const ext = file.extension === 'pdf' ? '.pdf' : `.${file.extension}`;
+    const basePath = file.path.replace(ext, '');
     const baseName = basePath.split('/').pop() || 'output';
     const dir = basePath.substring(0, basePath.length - baseName.length);
 
