@@ -27893,7 +27893,7 @@ var PDFToMDPlugin = class extends import_obsidian4.Plugin {
         }
       }
     }));
-    document.addEventListener("contextmenu", (event) => {
+    this.registerDomEvent(document, "contextmenu", (event) => {
       const target = event.target;
       if (target.tagName !== "IMG")
         return;
@@ -27902,13 +27902,16 @@ var PDFToMDPlugin = class extends import_obsidian4.Plugin {
       if (!src || src.startsWith("http") || src.startsWith("data:"))
         return;
       event.preventDefault();
+      event.stopPropagation();
+      console.log("Image context menu triggered, src:", src);
       const menu = new import_obsidian4.Menu();
       menu.addItem((item) => item.setTitle("Convert Image to Markdown").setIcon("image").onClick(async () => {
+        console.log("Converting image in note:", src);
         await this.convertImageInNote(img, src);
       }));
       menu.addSeparator();
       menu.showAtPosition({ x: event.clientX, y: event.clientY });
-    }, true);
+    });
   }
   loadApiKeysFromEnv() {
     const envVars = {

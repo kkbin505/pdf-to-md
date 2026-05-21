@@ -52,7 +52,7 @@ export default class PDFToMDPlugin extends Plugin {
     );
 
     // Register context menu for images in editor
-    document.addEventListener('contextmenu', (event: MouseEvent) => {
+    this.registerDomEvent(document, 'contextmenu' as any, (event: any) => {
       const target = event.target as HTMLElement;
 
       // Check if right-clicked element is an <img> tag
@@ -66,6 +66,9 @@ export default class PDFToMDPlugin extends Plugin {
 
       // Prevent default context menu
       event.preventDefault();
+      event.stopPropagation();
+
+      console.log('Image context menu triggered, src:', src);
 
       // Build menu
       const menu = new Menu();
@@ -74,13 +77,14 @@ export default class PDFToMDPlugin extends Plugin {
           .setTitle('Convert Image to Markdown')
           .setIcon('image')
           .onClick(async () => {
+            console.log('Converting image in note:', src);
             await this.convertImageInNote(img, src);
           })
       );
       menu.addSeparator();
 
       menu.showAtPosition({ x: event.clientX, y: event.clientY });
-    }, true);
+    });
   }
 
   private loadApiKeysFromEnv() {
