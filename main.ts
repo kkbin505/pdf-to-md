@@ -37,7 +37,7 @@ export default class PDFToMDPlugin extends Plugin {
             item
               .setTitle('Convert to Markdown')
               .setIcon('file-text')
-              .setSection('action')
+              .setSection('pdf-to-md')
               .onClick(() => this.convertFile(file))
           );
         } else if (supportedImageExtensions.includes(file.extension.toLowerCase())) {
@@ -49,7 +49,7 @@ export default class PDFToMDPlugin extends Plugin {
             item
               .setTitle('Convert Image to Markdown')
               .setIcon('image')
-              .setSection('action')
+              .setSection('pdf-to-md')
               .onClick(() => {
                 if (fromEditor) {
                   this.convertImageInNoteFromFile(file);

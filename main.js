@@ -27887,10 +27887,10 @@ var PDFToMDPlugin = class extends import_obsidian4.Plugin {
       if (!(file instanceof import_obsidian4.TFile))
         return;
       if (file.extension === "pdf") {
-        menu.addItem((item) => item.setTitle("Convert to Markdown").setIcon("file-text").setSection("action").onClick(() => this.convertFile(file)));
+        menu.addItem((item) => item.setTitle("Convert to Markdown").setIcon("file-text").setSection("pdf-to-md").onClick(() => this.convertFile(file)));
       } else if (supportedImageExtensions.includes(file.extension.toLowerCase())) {
         const fromEditor = source === "link-context-menu" || source === "embed-context-menu";
-        menu.addItem((item) => item.setTitle("Convert Image to Markdown").setIcon("image").setSection("action").onClick(() => {
+        menu.addItem((item) => item.setTitle("Convert Image to Markdown").setIcon("image").setSection("pdf-to-md").onClick(() => {
           if (fromEditor) {
             this.convertImageInNoteFromFile(file);
           } else {
