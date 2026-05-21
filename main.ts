@@ -45,6 +45,7 @@ export default class PDFToMDPlugin extends Plugin {
                 .setIcon('image')
                 .onClick(() => this.convertFile(file))
             );
+            menu.addSeparator();
           }
         }
       })

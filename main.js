@@ -27889,6 +27889,7 @@ var PDFToMDPlugin = class extends import_obsidian4.Plugin {
           menu.addItem((item) => item.setTitle("Convert to Markdown").setIcon("file-text").onClick(() => this.convertFile(file)));
         } else if (supportedImageExtensions.includes(file.extension.toLowerCase())) {
           menu.addItem((item) => item.setTitle("Convert Image to Markdown").setIcon("image").onClick(() => this.convertFile(file)));
+          menu.addSeparator();
         }
       }
     }));
