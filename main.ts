@@ -1,4 +1,4 @@
-import { Plugin, Notice, TFile } from 'obsidian';
+import { Plugin, Notice, TFile, Menu } from 'obsidian';
 import * as pdfjsLib from 'pdfjs-dist';
 import { PDFToMDSettings, PDFToMDSettingTab, DEFAULT_SETTINGS, MODEL_OPTIONS } from './src/settings';
 import { PDFConverter } from './src/converter';
@@ -49,6 +49,36 @@ export default class PDFToMDPlugin extends Plugin {
         }
       })
     );
+
+    // Register context menu for images in editor
+    document.addEventListener('contextmenu', (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+
+      // Check if right-clicked element is an <img> tag
+      if (target.tagName !== 'IMG') return;
+
+      const img = target as HTMLImageElement;
+      const src = img.src;
+
+      // Skip external URLs and data URIs (only handle vault images)
+      if (!src || src.startsWith('http') || src.startsWith('data:')) return;
+
+      // Prevent default context menu
+      event.preventDefault();
+
+      // Build menu
+      const menu = new Menu();
+      menu.addItem(item =>
+        item
+          .setTitle('Convert Image to Markdown')
+          .setIcon('image')
+          .onClick(async () => {
+            await this.convertImageInNote(img, src);
+          })
+      );
+
+      menu.showAtPosition({ x: event.clientX, y: event.clientY });
+    }, true);
   }
 
   private loadApiKeysFromEnv() {
@@ -292,5 +322,118 @@ export default class PDFToMDPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+
+  private async convertImageInNote(imgElement: HTMLImageElement, src: string) {
+    try {
+      // Get the editor view
+      const editor = this.app.workspace.activeEditor?.editor;
+      if (!editor) {
+        new Notice('❌ No active editor found');
+        return;
+      }
+
+      // Resolve vault path from image src
+      const vaultPath = this.resolveImagePath(src);
+      if (!vaultPath) {
+        new Notice('❌ Could not resolve image path');
+        return;
+      }
+
+      // Read the image file
+      const imageFile = this.app.vault.getAbstractFileByPath(vaultPath);
+      if (!imageFile || !(imageFile instanceof TFile)) {
+        new Notice('❌ Image file not found in vault');
+        return;
+      }
+
+      const imageData = await this.app.vault.readBinary(imageFile);
+
+      // Check API key
+      const apiKey = this.getApiKey(this.settings.provider);
+      if (!apiKey) {
+        new Notice('❌ API Key not configured');
+        return;
+      }
+
+      const notice = new Notice('Converting image...', 0);
+
+      const provider = this.createProvider(apiKey);
+      const converter = new PDFConverter(provider, {
+        timeout: this.settings.timeout * 1000,
+        maxRetries: this.settings.maxRetries,
+      });
+
+      const markdown = await converter.convertImageBuffer(imageData);
+
+      // Find the image line in the editor and insert result below it
+      const content = editor.getValue();
+      const lines = content.split('\n');
+      let insertLine = -1;
+
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes(vaultPath)) {
+          insertLine = i;
+          break;
+        }
+      }
+
+      if (insertLine === -1) {
+        new Notice('❌ Could not find image line in editor');
+        return;
+      }
+
+      // Insert result after the image line
+      const newContent =
+        lines.slice(0, insertLine + 1).join('\n') +
+        '\n\n' + markdown +
+        '\n\n' +
+        lines.slice(insertLine + 1).join('\n');
+
+      editor.setValue(newContent);
+      notice.setMessage(`✓ Image converted and inserted`);
+      setTimeout(() => notice.hide(), 2000);
+    } catch (error) {
+      new Notice(`Error: ${error instanceof Error ? error.message : String(error)}`, 10000);
+      console.error('Image conversion error:', error);
+    }
+  }
+
+  private resolveImagePath(src: string): string | null {
+    try {
+      // If it's a relative path from markdown, resolve it
+      if (src.startsWith('../') || src.startsWith('./')) {
+        // Get current file path and resolve relative path
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) return null;
+
+        const dir = activeFile.parent?.path || '';
+        // Simple path resolution
+        let resolved = src;
+        if (src.startsWith('../')) {
+          const parts = dir.split('/');
+          let upCount = 0;
+          let remaining = src;
+          while (remaining.startsWith('../')) {
+            upCount++;
+            remaining = remaining.slice(3);
+          }
+          const newPath = parts.slice(0, parts.length - upCount).join('/');
+          resolved = newPath ? newPath + '/' + remaining : remaining;
+        } else if (src.startsWith('./')) {
+          resolved = (dir ? dir + '/' : '') + src.slice(2);
+        }
+        return resolved;
+      }
+
+      // If it's already a vault path
+      if (!src.startsWith('http') && !src.startsWith('data:')) {
+        return src;
+      }
+    } catch (e) {
+      console.error('Error resolving image path:', e);
+    }
+
+    return null;
   }
 }

@@ -27892,6 +27892,21 @@ var PDFToMDPlugin = class extends import_obsidian4.Plugin {
         }
       }
     }));
+    document.addEventListener("contextmenu", (event) => {
+      const target = event.target;
+      if (target.tagName !== "IMG")
+        return;
+      const img = target;
+      const src = img.src;
+      if (!src || src.startsWith("http") || src.startsWith("data:"))
+        return;
+      event.preventDefault();
+      const menu = new import_obsidian4.Menu();
+      menu.addItem((item) => item.setTitle("Convert Image to Markdown").setIcon("image").onClick(async () => {
+        await this.convertImageInNote(img, src);
+      }));
+      menu.showAtPosition({ x: event.clientX, y: event.clientY });
+    }, true);
   }
   loadApiKeysFromEnv() {
     const envVars = {
@@ -28081,5 +28096,88 @@ Then restart Obsidian.`, 1e4);
   }
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+  async convertImageInNote(imgElement, src) {
+    try {
+      const editor = this.app.workspace.activeEditor?.editor;
+      if (!editor) {
+        new import_obsidian4.Notice("\u274C No active editor found");
+        return;
+      }
+      const vaultPath = this.resolveImagePath(src);
+      if (!vaultPath) {
+        new import_obsidian4.Notice("\u274C Could not resolve image path");
+        return;
+      }
+      const imageFile = this.app.vault.getAbstractFileByPath(vaultPath);
+      if (!imageFile || !(imageFile instanceof import_obsidian4.TFile)) {
+        new import_obsidian4.Notice("\u274C Image file not found in vault");
+        return;
+      }
+      const imageData = await this.app.vault.readBinary(imageFile);
+      const apiKey = this.getApiKey(this.settings.provider);
+      if (!apiKey) {
+        new import_obsidian4.Notice("\u274C API Key not configured");
+        return;
+      }
+      const notice = new import_obsidian4.Notice("Converting image...", 0);
+      const provider = this.createProvider(apiKey);
+      const converter = new PDFConverter(provider, {
+        timeout: this.settings.timeout * 1e3,
+        maxRetries: this.settings.maxRetries
+      });
+      const markdown = await converter.convertImageBuffer(imageData);
+      const content = editor.getValue();
+      const lines = content.split("\n");
+      let insertLine = -1;
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes(vaultPath)) {
+          insertLine = i;
+          break;
+        }
+      }
+      if (insertLine === -1) {
+        new import_obsidian4.Notice("\u274C Could not find image line in editor");
+        return;
+      }
+      const newContent = lines.slice(0, insertLine + 1).join("\n") + "\n\n" + markdown + "\n\n" + lines.slice(insertLine + 1).join("\n");
+      editor.setValue(newContent);
+      notice.setMessage(`\u2713 Image converted and inserted`);
+      setTimeout(() => notice.hide(), 2e3);
+    } catch (error) {
+      new import_obsidian4.Notice(`Error: ${error instanceof Error ? error.message : String(error)}`, 1e4);
+      console.error("Image conversion error:", error);
+    }
+  }
+  resolveImagePath(src) {
+    try {
+      if (src.startsWith("../") || src.startsWith("./")) {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile)
+          return null;
+        const dir = activeFile.parent?.path || "";
+        let resolved = src;
+        if (src.startsWith("../")) {
+          const parts = dir.split("/");
+          let upCount = 0;
+          let remaining = src;
+          while (remaining.startsWith("../")) {
+            upCount++;
+            remaining = remaining.slice(3);
+          }
+          const newPath = parts.slice(0, parts.length - upCount).join("/");
+          resolved = newPath ? newPath + "/" + remaining : remaining;
+        } else if (src.startsWith("./")) {
+          resolved = (dir ? dir + "/" : "") + src.slice(2);
+        }
+        return resolved;
+      }
+      if (!src.startsWith("http") && !src.startsWith("data:")) {
+        return src;
+      }
+    } catch (e) {
+      console.error("Error resolving image path:", e);
+    }
+    return null;
   }
 };
