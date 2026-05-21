@@ -75,7 +75,7 @@ var __privateMethod = (obj, member, method) => {
 __export(exports, {
   default: () => PDFToMDPlugin
 });
-var import_obsidian3 = __toModule(require("obsidian"));
+var import_obsidian4 = __toModule(require("obsidian"));
 
 // node_modules/pdfjs-dist/build/pdf.mjs
 var import_meta = {};
@@ -27529,7 +27529,10 @@ var MODEL_OPTIONS = [
   { id: "gemini-2.5-pro", name: "Google Gemini 2.5 Pro", provider: "gemini", apiModel: "gemini-2.5-pro" },
   { id: "qwen-vl-max", name: "Alibaba Qwen VL Max (\u5343\u95EE)", provider: "qwen", apiModel: "qwen-vl-max" },
   { id: "qwen-vl-plus", name: "Alibaba Qwen VL Plus (\u5343\u95EE)", provider: "qwen", apiModel: "qwen-vl-plus" },
-  { id: "qwen-vl-max-latest", name: "Alibaba Qwen VL Max Latest (\u5343\u95EE)", provider: "qwen", apiModel: "qwen-vl-max-latest" }
+  { id: "qwen-vl-max-latest", name: "Alibaba Qwen VL Max Latest (\u5343\u95EE)", provider: "qwen", apiModel: "qwen-vl-max-latest" },
+  { id: "claude-opus-4-7", name: "Anthropic Claude Opus 4", provider: "claude", apiModel: "claude-opus-4-7" },
+  { id: "claude-sonnet-4-6", name: "Anthropic Claude Sonnet 4", provider: "claude", apiModel: "claude-sonnet-4-6" },
+  { id: "claude-haiku-4-5", name: "Anthropic Claude Haiku 4.5", provider: "claude", apiModel: "claude-haiku-4-5-20251001" }
 ];
 var DEFAULT_SETTINGS = {
   provider: "qwen",
@@ -27613,6 +27616,9 @@ var PDFToMDSettingTab = class extends import_obsidian.PluginSettingTab {
         break;
       case "gemini":
         this.addProviderSetting("Google Gemini API Key Status", "Get from Google AI Studio / Generative AI console", "GEMINI_API_KEY");
+        break;
+      case "claude":
+        this.addProviderSetting("Anthropic API Key Status", "Get from https://console.anthropic.com/settings/keys", "ANTHROPIC_API_KEY");
         break;
     }
   }
@@ -27786,8 +27792,65 @@ var OpenAICompatibleProvider = class {
   }
 };
 
+// src/providers/anthropic.ts
+var import_obsidian3 = __toModule(require("obsidian"));
+var AnthropicProvider = class {
+  constructor(config) {
+    this.apiKey = config.apiKey;
+    this.model = config.model;
+  }
+  async recognize(imageBase64) {
+    const payload = {
+      model: this.model,
+      max_tokens: 2e3,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/png",
+                data: imageBase64
+              }
+            },
+            {
+              type: "text",
+              text: this.getPrompt()
+            }
+          ]
+        }
+      ]
+    };
+    const response = await (0, import_obsidian3.requestUrl)({
+      url: "https://api.anthropic.com/v1/messages",
+      method: "POST",
+      headers: {
+        "x-api-key": this.apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(payload),
+      throw: false
+    });
+    if (response.status >= 400) {
+      const msg = response.json?.error?.message ?? response.text;
+      throw new Error(`Anthropic API Error ${response.status}: ${msg}`);
+    }
+    return response.json.content[0].text;
+  }
+  getPrompt() {
+    return `Transcribe this handwritten content into Markdown format:
+1. Preserve all text and numbers exactly
+2. Use LaTeX for math: inline with $...$, block with $$...$$
+3. Keep document structure (headings, paragraphs, lists)
+4. Output only the Markdown, no extra commentary`;
+  }
+};
+
 // main.ts
-var PDFToMDPlugin = class extends import_obsidian3.Plugin {
+var PDFToMDPlugin = class extends import_obsidian4.Plugin {
   constructor() {
     super(...arguments);
     this.apiKeys = new Map();
@@ -27801,7 +27864,7 @@ var PDFToMDPlugin = class extends import_obsidian3.Plugin {
     this.loadApiKeysFromEnv();
     this.addSettingTab(new PDFToMDSettingTab(this.app, this));
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
-      if (file instanceof import_obsidian3.TFile && file.extension === "pdf") {
+      if (file instanceof import_obsidian4.TFile && file.extension === "pdf") {
         menu.addItem((item) => item.setTitle("Convert to Markdown").setIcon("file-text").onClick(() => this.convertPdf(file)));
       }
     }));
@@ -27810,7 +27873,8 @@ var PDFToMDPlugin = class extends import_obsidian3.Plugin {
     const envVars = {
       "openai": "OPENAI_API_KEY",
       "qwen": "DASHSCOPE_API_KEY",
-      "gemini": "GEMINI_API_KEY"
+      "gemini": "GEMINI_API_KEY",
+      "claude": "ANTHROPIC_API_KEY"
     };
     for (const [provider, envVar] of Object.entries(envVars)) {
       const value = this.getEnvValue(envVar);
@@ -27838,9 +27902,21 @@ var PDFToMDPlugin = class extends import_obsidian3.Plugin {
     try {
       const apiKey = this.getApiKey(this.settings.provider);
       if (!apiKey) {
-        const envVar = this.settings.provider === "openai" ? "OPENAI_API_KEY" : this.settings.provider === "qwen" ? "DASHSCOPE_API_KEY" : "GEMINI_API_KEY";
-        const providerName = this.settings.provider === "openai" ? "OpenAI" : this.settings.provider === "qwen" ? "Alibaba Qwen" : "Google Gemini";
-        new import_obsidian3.Notice(`\u274C ${providerName} API Key not configured!
+        const envVarMap = {
+          openai: "OPENAI_API_KEY",
+          qwen: "DASHSCOPE_API_KEY",
+          gemini: "GEMINI_API_KEY",
+          claude: "ANTHROPIC_API_KEY"
+        };
+        const providerNameMap = {
+          openai: "OpenAI",
+          qwen: "Alibaba Qwen",
+          gemini: "Google Gemini",
+          claude: "Anthropic Claude"
+        };
+        const envVar = envVarMap[this.settings.provider] ?? "API_KEY";
+        const providerName = providerNameMap[this.settings.provider] ?? this.settings.provider;
+        new import_obsidian4.Notice(`\u274C ${providerName} API Key not configured!
 
 Please set environment variable: ${envVar}
 
@@ -27848,7 +27924,7 @@ Then restart Obsidian.`, 1e4);
         console.error(`API Key missing. Environment variable: ${envVar}`);
         return;
       }
-      const notice = new import_obsidian3.Notice("Starting PDF conversion...", 0);
+      const notice = new import_obsidian4.Notice("Starting PDF conversion...", 0);
       const data = await this.app.vault.readBinary(file);
       const pdfBuffer = data;
       const provider = this.createProvider(apiKey);
@@ -27869,10 +27945,10 @@ Then restart Obsidian.`, 1e4);
       const outputPath = this.getOutputPath(file);
       const existingFile = this.app.vault.getAbstractFileByPath(outputPath);
       if (existingFile && this.settings.conflictResolution === "skip") {
-        new import_obsidian3.Notice(`File already exists: ${outputPath}. Skipped.`, 5e3);
+        new import_obsidian4.Notice(`File already exists: ${outputPath}. Skipped.`, 5e3);
         return;
       }
-      if (existingFile && existingFile instanceof import_obsidian3.TFile) {
+      if (existingFile && existingFile instanceof import_obsidian4.TFile) {
         await this.app.vault.modify(existingFile, markdown);
       } else {
         await this.app.vault.create(outputPath, markdown);
@@ -27882,11 +27958,11 @@ Then restart Obsidian.`, 1e4);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes("Unauthorized") || message.includes("API key")) {
-        new import_obsidian3.Notice(`\u274C API Error: Invalid or expired API key. Please check your environment variables.`, 1e4);
+        new import_obsidian4.Notice(`\u274C API Error: Invalid or expired API key. Please check your environment variables.`, 1e4);
       } else if (message.includes("timeout")) {
-        new import_obsidian3.Notice(`\u274C Conversion timeout. Try increasing timeout in plugin settings or use a faster model.`, 1e4);
+        new import_obsidian4.Notice(`\u274C Conversion timeout. Try increasing timeout in plugin settings or use a faster model.`, 1e4);
       } else {
-        new import_obsidian3.Notice(`Error: ${message}`, 1e4);
+        new import_obsidian4.Notice(`Error: ${message}`, 1e4);
       }
       console.error("Conversion error:", error);
     }
@@ -27948,6 +28024,8 @@ Then restart Obsidian.`, 1e4);
           apiKey,
           model: modelName
         }, "https://generativelanguage.googleapis.com/v1beta/openai/");
+      case "claude":
+        return new AnthropicProvider({ apiKey, model: modelName });
       default:
         throw new Error(`Unknown provider: ${settings.provider}`);
     }

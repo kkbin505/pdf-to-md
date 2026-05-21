@@ -2,6 +2,8 @@
 
 将手写笔记智能转换为 Markdown，完美保留公式和排版。设计为 Obsidian 插件，实现无缝一键转换。
 
+![alt text](img/obsidian_pdf_to_md.gif)
+
 **中文** | **[English](README.md)**
 
 ---

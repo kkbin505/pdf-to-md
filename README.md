@@ -3,6 +3,7 @@
 Writing by hand aligns more naturally with the flow of thought than typing in my mind.
 
 This tool converts handwritten notes to Markdown using AI, designed as a seamless Obsidian Plugin.
+![alt text](img/obsidian_pdf_to_md.gif)
 
 **[中文文档](README_zh.md)** | **English**
 

@@ -4,7 +4,7 @@ import PDFToMDPlugin from '../main';
 export interface ModelOption {
   id: string;
   name: string;
-  provider: 'openai' | 'qwen' | 'gemini';
+  provider: 'openai' | 'qwen' | 'gemini' | 'claude';
   apiModel: string;
 }
 
@@ -22,10 +22,13 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: 'qwen-vl-max', name: 'Alibaba Qwen VL Max (千问)', provider: 'qwen', apiModel: 'qwen-vl-max' },
   { id: 'qwen-vl-plus', name: 'Alibaba Qwen VL Plus (千问)', provider: 'qwen', apiModel: 'qwen-vl-plus' },
   { id: 'qwen-vl-max-latest', name: 'Alibaba Qwen VL Max Latest (千问)', provider: 'qwen', apiModel: 'qwen-vl-max-latest' },
+  { id: 'claude-opus-4-7', name: 'Anthropic Claude Opus 4', provider: 'claude', apiModel: 'claude-opus-4-7' },
+  { id: 'claude-sonnet-4-6', name: 'Anthropic Claude Sonnet 4', provider: 'claude', apiModel: 'claude-sonnet-4-6' },
+  { id: 'claude-haiku-4-5', name: 'Anthropic Claude Haiku 4.5', provider: 'claude', apiModel: 'claude-haiku-4-5-20251001' },
 ];
 
 export interface PDFToMDSettings {
-  provider: 'openai' | 'qwen' | 'gemini';
+  provider: 'openai' | 'qwen' | 'gemini' | 'claude';
   selectedModelId: string;
   openaiModel: string;
   qwenModel: string;
@@ -196,6 +199,13 @@ export class PDFToMDSettingTab extends PluginSettingTab {
           'Google Gemini API Key Status',
           'Get from Google AI Studio / Generative AI console',
           'GEMINI_API_KEY'
+        );
+        break;
+      case 'claude':
+        this.addProviderSetting(
+          'Anthropic API Key Status',
+          'Get from https://console.anthropic.com/settings/keys',
+          'ANTHROPIC_API_KEY'
         );
         break;
     }

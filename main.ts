@@ -4,6 +4,7 @@ import { PDFToMDSettings, PDFToMDSettingTab, DEFAULT_SETTINGS, MODEL_OPTIONS } f
 import { PDFConverter } from './src/converter';
 import { ModelProvider } from './src/providers/base';
 import { OpenAICompatibleProvider } from './src/providers/openai-compat';
+import { AnthropicProvider } from './src/providers/anthropic';
 
 export default class PDFToMDPlugin extends Plugin {
   settings: PDFToMDSettings;
@@ -44,6 +45,7 @@ export default class PDFToMDPlugin extends Plugin {
       'openai': 'OPENAI_API_KEY',
       'qwen': 'DASHSCOPE_API_KEY',
       'gemini': 'GEMINI_API_KEY',
+      'claude': 'ANTHROPIC_API_KEY',
     };
 
     for (const [provider, envVar] of Object.entries(envVars)) {
@@ -77,10 +79,20 @@ export default class PDFToMDPlugin extends Plugin {
       // Check if API key is configured
       const apiKey = this.getApiKey(this.settings.provider);
       if (!apiKey) {
-        const envVar = this.settings.provider === 'openai' ? 'OPENAI_API_KEY' : 
-                       this.settings.provider === 'qwen' ? 'DASHSCOPE_API_KEY' : 'GEMINI_API_KEY';
-        const providerName = this.settings.provider === 'openai' ? 'OpenAI' :
-                             this.settings.provider === 'qwen' ? 'Alibaba Qwen' : 'Google Gemini';
+        const envVarMap: Record<string, string> = {
+          openai: 'OPENAI_API_KEY',
+          qwen: 'DASHSCOPE_API_KEY',
+          gemini: 'GEMINI_API_KEY',
+          claude: 'ANTHROPIC_API_KEY',
+        };
+        const providerNameMap: Record<string, string> = {
+          openai: 'OpenAI',
+          qwen: 'Alibaba Qwen',
+          gemini: 'Google Gemini',
+          claude: 'Anthropic Claude',
+        };
+        const envVar = envVarMap[this.settings.provider] ?? 'API_KEY';
+        const providerName = providerNameMap[this.settings.provider] ?? this.settings.provider;
 
         new Notice(
           `❌ ${providerName} API Key not configured!\n\nPlease set environment variable: ${envVar}\n\nThen restart Obsidian.`,
@@ -224,6 +236,9 @@ export default class PDFToMDPlugin extends Plugin {
           },
           'https://generativelanguage.googleapis.com/v1beta/openai/'
         );
+
+      case 'claude':
+        return new AnthropicProvider({ apiKey: apiKey, model: modelName });
 
       default:
         throw new Error(`Unknown provider: ${settings.provider}`);
