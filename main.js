@@ -27883,35 +27883,22 @@ var PDFToMDPlugin = class extends import_obsidian4.Plugin {
     this.loadApiKeysFromEnv();
     this.addSettingTab(new PDFToMDSettingTab(this.app, this));
     const supportedImageExtensions = ["png", "jpg", "jpeg", "webp"];
-    this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
-      if (file instanceof import_obsidian4.TFile) {
-        if (file.extension === "pdf") {
-          menu.addItem((item) => item.setTitle("Convert to Markdown").setIcon("file-text").onClick(() => this.convertFile(file)));
-        } else if (supportedImageExtensions.includes(file.extension.toLowerCase())) {
-          menu.addItem((item) => item.setTitle("Convert Image to Markdown").setIcon("image").onClick(() => this.convertFile(file)));
-          menu.addSeparator();
-        }
+    this.registerEvent(this.app.workspace.on("file-menu", (menu, file, source) => {
+      if (!(file instanceof import_obsidian4.TFile))
+        return;
+      if (file.extension === "pdf") {
+        menu.addItem((item) => item.setTitle("Convert to Markdown").setIcon("file-text").setSection("action").onClick(() => this.convertFile(file)));
+      } else if (supportedImageExtensions.includes(file.extension.toLowerCase())) {
+        const fromEditor = source === "link-context-menu" || source === "embed-context-menu";
+        menu.addItem((item) => item.setTitle("Convert Image to Markdown").setIcon("image").setSection("action").onClick(() => {
+          if (fromEditor) {
+            this.convertImageInNoteFromFile(file);
+          } else {
+            this.convertFile(file);
+          }
+        }));
       }
     }));
-    this.registerDomEvent(document, "contextmenu", (event) => {
-      const target = event.target;
-      if (target.tagName !== "IMG")
-        return;
-      const img = target;
-      const src = img.src;
-      if (!src || src.startsWith("http") || src.startsWith("data:"))
-        return;
-      event.preventDefault();
-      event.stopPropagation();
-      console.log("Image context menu triggered, src:", src);
-      const menu = new import_obsidian4.Menu();
-      menu.addItem((item) => item.setTitle("Convert Image to Markdown").setIcon("image").onClick(async () => {
-        console.log("Converting image in note:", src);
-        await this.convertImageInNote(img, src);
-      }));
-      menu.addSeparator();
-      menu.showAtPosition({ x: event.clientX, y: event.clientY });
-    });
   }
   loadApiKeysFromEnv() {
     const envVars = {
@@ -28101,6 +28088,50 @@ Then restart Obsidian.`, 1e4);
   }
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+  async convertImageInNoteFromFile(file) {
+    try {
+      const editor = this.app.workspace.activeEditor?.editor;
+      if (!editor) {
+        new import_obsidian4.Notice("\u274C No active editor found");
+        return;
+      }
+      const apiKey = this.getApiKey(this.settings.provider);
+      if (!apiKey) {
+        new import_obsidian4.Notice("\u274C API Key not configured");
+        return;
+      }
+      const notice = new import_obsidian4.Notice("Converting image...", 0);
+      const imageData = await this.app.vault.readBinary(file);
+      const provider = this.createProvider(apiKey);
+      const converter = new PDFConverter(provider, {
+        timeout: this.settings.timeout * 1e3,
+        maxRetries: this.settings.maxRetries
+      });
+      const markdown = await converter.convertImageBuffer(imageData);
+      const content = editor.getValue();
+      const lines = content.split("\n");
+      const fileName = file.name;
+      const filePath = file.path;
+      let insertLine = -1;
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes(fileName) || lines[i].includes(filePath)) {
+          insertLine = i;
+          break;
+        }
+      }
+      if (insertLine === -1) {
+        new import_obsidian4.Notice("\u274C Could not find image line in editor");
+        return;
+      }
+      const newContent = lines.slice(0, insertLine + 1).join("\n") + "\n\n" + markdown + "\n\n" + lines.slice(insertLine + 1).join("\n");
+      editor.setValue(newContent);
+      notice.setMessage(`\u2713 Image converted and inserted`);
+      setTimeout(() => notice.hide(), 2e3);
+    } catch (error) {
+      new import_obsidian4.Notice(`Error: ${error instanceof Error ? error.message : String(error)}`, 1e4);
+      console.error("Image conversion error:", error);
+    }
   }
   async convertImageInNote(imgElement, src) {
     try {

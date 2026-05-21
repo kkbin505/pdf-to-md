@@ -29,62 +29,38 @@ export default class PDFToMDPlugin extends Plugin {
     const supportedImageExtensions = ['png', 'jpg', 'jpeg', 'webp'];
 
     this.registerEvent(
-      this.app.workspace.on('file-menu', (menu, file) => {
-        if (file instanceof TFile) {
-          if (file.extension === 'pdf') {
-            menu.addItem(item =>
-              item
-                .setTitle('Convert to Markdown')
-                .setIcon('file-text')
-                .onClick(() => this.convertFile(file))
-            );
-          } else if (supportedImageExtensions.includes(file.extension.toLowerCase())) {
-            menu.addItem(item =>
-              item
-                .setTitle('Convert Image to Markdown')
-                .setIcon('image')
-                .onClick(() => this.convertFile(file))
-            );
-            menu.addSeparator();
-          }
+      this.app.workspace.on('file-menu', (menu, file, source) => {
+        if (!(file instanceof TFile)) return;
+
+        if (file.extension === 'pdf') {
+          menu.addItem(item =>
+            item
+              .setTitle('Convert to Markdown')
+              .setIcon('file-text')
+              .setSection('action')
+              .onClick(() => this.convertFile(file))
+          );
+        } else if (supportedImageExtensions.includes(file.extension.toLowerCase())) {
+          // Detect if right-click came from inside an editor (link/embed menu)
+          // vs from file explorer
+          const fromEditor = source === 'link-context-menu' || source === 'embed-context-menu';
+
+          menu.addItem(item =>
+            item
+              .setTitle('Convert Image to Markdown')
+              .setIcon('image')
+              .setSection('action')
+              .onClick(() => {
+                if (fromEditor) {
+                  this.convertImageInNoteFromFile(file);
+                } else {
+                  this.convertFile(file);
+                }
+              })
+          );
         }
       })
     );
-
-    // Register context menu for images in editor
-    this.registerDomEvent(document, 'contextmenu' as any, (event: any) => {
-      const target = event.target as HTMLElement;
-
-      // Check if right-clicked element is an <img> tag
-      if (target.tagName !== 'IMG') return;
-
-      const img = target as HTMLImageElement;
-      const src = img.src;
-
-      // Skip external URLs and data URIs (only handle vault images)
-      if (!src || src.startsWith('http') || src.startsWith('data:')) return;
-
-      // Prevent default context menu
-      event.preventDefault();
-      event.stopPropagation();
-
-      console.log('Image context menu triggered, src:', src);
-
-      // Build menu
-      const menu = new Menu();
-      menu.addItem(item =>
-        item
-          .setTitle('Convert Image to Markdown')
-          .setIcon('image')
-          .onClick(async () => {
-            console.log('Converting image in note:', src);
-            await this.convertImageInNote(img, src);
-          })
-      );
-      menu.addSeparator();
-
-      menu.showAtPosition({ x: event.clientX, y: event.clientY });
-    });
   }
 
   private loadApiKeysFromEnv() {
@@ -328,6 +304,65 @@ export default class PDFToMDPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+
+  private async convertImageInNoteFromFile(file: TFile) {
+    try {
+      const editor = this.app.workspace.activeEditor?.editor;
+      if (!editor) {
+        new Notice('❌ No active editor found');
+        return;
+      }
+
+      const apiKey = this.getApiKey(this.settings.provider);
+      if (!apiKey) {
+        new Notice('❌ API Key not configured');
+        return;
+      }
+
+      const notice = new Notice('Converting image...', 0);
+      const imageData = await this.app.vault.readBinary(file);
+
+      const provider = this.createProvider(apiKey);
+      const converter = new PDFConverter(provider, {
+        timeout: this.settings.timeout * 1000,
+        maxRetries: this.settings.maxRetries,
+      });
+
+      const markdown = await converter.convertImageBuffer(imageData);
+
+      // Find the line containing the image link in the editor
+      const content = editor.getValue();
+      const lines = content.split('\n');
+      const fileName = file.name;
+      const filePath = file.path;
+      let insertLine = -1;
+
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes(fileName) || lines[i].includes(filePath)) {
+          insertLine = i;
+          break;
+        }
+      }
+
+      if (insertLine === -1) {
+        new Notice('❌ Could not find image line in editor');
+        return;
+      }
+
+      const newContent =
+        lines.slice(0, insertLine + 1).join('\n') +
+        '\n\n' + markdown +
+        '\n\n' +
+        lines.slice(insertLine + 1).join('\n');
+
+      editor.setValue(newContent);
+      notice.setMessage(`✓ Image converted and inserted`);
+      setTimeout(() => notice.hide(), 2000);
+    } catch (error) {
+      new Notice(`Error: ${error instanceof Error ? error.message : String(error)}`, 10000);
+      console.error('Image conversion error:', error);
+    }
   }
 
   private async convertImageInNote(imgElement: HTMLImageElement, src: string) {
