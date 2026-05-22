@@ -38,6 +38,7 @@ export interface PDFToMDSettings {
   timeout: number;
   maxRetries: number;
   conflictResolution: 'overwrite' | 'skip' | 'timestamp' | 'by-model';
+  handwriteFolder: string;
 }
 
 export const DEFAULT_SETTINGS: PDFToMDSettings = {
@@ -51,6 +52,7 @@ export const DEFAULT_SETTINGS: PDFToMDSettings = {
   timeout: 60,
   maxRetries: 3,
   conflictResolution: 'by-model',
+  handwriteFolder: '',
 };
 
 export class PDFToMDSettingTab extends PluginSettingTab {
@@ -171,6 +173,20 @@ export class PDFToMDSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.conflictResolution)
           .onChange(async value => {
             this.plugin.settings.conflictResolution = value as any;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // Handwrite save folder
+    new Setting(containerEl)
+      .setName('Handwrite save folder')
+      .setDesc('Folder to save handwritten PNG files (empty = vault root)')
+      .addText(text =>
+        text
+          .setPlaceholder('e.g., handwriting')
+          .setValue(this.plugin.settings.handwriteFolder)
+          .onChange(async value => {
+            this.plugin.settings.handwriteFolder = value;
             await this.plugin.saveSettings();
           })
       );

@@ -5,6 +5,7 @@ import { PDFConverter } from './src/converter';
 import { ModelProvider } from './src/providers/base';
 import { OpenAICompatibleProvider } from './src/providers/openai-compat';
 import { AnthropicProvider } from './src/providers/anthropic';
+import { HandwriteModal } from './src/handwrite-modal';
 
 export default class PDFToMDPlugin extends Plugin {
   settings: PDFToMDSettings;
@@ -25,6 +26,19 @@ export default class PDFToMDPlugin extends Plugin {
     this.loadApiKeysFromEnv();
 
     this.addSettingTab(new PDFToMDSettingTab(this.app, this));
+
+    // Handwriting canvas: ribbon icon + command
+    this.addRibbonIcon('pencil', 'Handwrite note', () => {
+      new HandwriteModal(this.app, this).open();
+    });
+
+    this.addCommand({
+      id: 'open-handwrite-modal',
+      name: 'Open handwriting canvas',
+      callback: () => {
+        new HandwriteModal(this.app, this).open();
+      },
+    });
 
     const supportedImageExtensions = ['png', 'jpg', 'jpeg', 'webp'];
 

@@ -1,1 +1,27 @@
-/* Empty styles file for the plugin */
+/* Handwriting modal - full screen */
+
+.pdf-to-md-handwrite-modal {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0 !important;
+}
+
+.pdf-to-md-handwrite-modal .handwrite-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+.pdf-to-md-handwrite-modal canvas {
+  cursor: crosshair;
+  touch-action: none;
+  display: block;
+  background: #ffffff;
+  flex: 1;
+  min-height: 0;
+}

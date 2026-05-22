@@ -75,7 +75,7 @@ var __privateMethod = (obj, member, method) => {
 __export(exports, {
   default: () => PDFToMDPlugin
 });
-var import_obsidian4 = __toModule(require("obsidian"));
+var import_obsidian5 = __toModule(require("obsidian"));
 
 // node_modules/pdfjs-dist/build/pdf.mjs
 var import_meta = {};
@@ -27544,7 +27544,8 @@ var DEFAULT_SETTINGS = {
   dpi: 200,
   timeout: 60,
   maxRetries: 3,
-  conflictResolution: "by-model"
+  conflictResolution: "by-model",
+  handwriteFolder: ""
 };
 var PDFToMDSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -27602,6 +27603,10 @@ var PDFToMDSettingTab = class extends import_obsidian.PluginSettingTab {
     }));
     new import_obsidian.Setting(containerEl).setName("File Conflict Resolution").setDesc("What to do if output file already exists").addDropdown((dropdown) => dropdown.addOption("overwrite", "Overwrite existing file").addOption("skip", "Skip (do not generate)").addOption("timestamp", "Add timestamp (e.g., file_20250515_110430.md)").addOption("by-model", "Add model name (e.g., file_qwen.md) - Recommended").setValue(this.plugin.settings.conflictResolution).onChange(async (value) => {
       this.plugin.settings.conflictResolution = value;
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian.Setting(containerEl).setName("Handwrite save folder").setDesc("Folder to save handwritten PNG files (empty = vault root)").addText((text) => text.setPlaceholder("e.g., handwriting").setValue(this.plugin.settings.handwriteFolder).onChange(async (value) => {
+      this.plugin.settings.handwriteFolder = value;
       await this.plugin.saveSettings();
     }));
   }
@@ -27868,8 +27873,174 @@ var AnthropicProvider = class {
   }
 };
 
+// src/handwrite-modal.ts
+var import_obsidian4 = __toModule(require("obsidian"));
+var HandwriteModal = class extends import_obsidian4.Modal {
+  constructor(app, plugin) {
+    super(app);
+    this.isDrawing = false;
+    this.lastX = 0;
+    this.lastY = 0;
+    this.strokeWidth = 3;
+    this.strokeColor = "#000000";
+    this.history = [];
+    this.MAX_HISTORY = 20;
+    this.plugin = plugin;
+  }
+  onOpen() {
+    const { contentEl, modalEl, containerEl } = this;
+    contentEl.empty();
+    contentEl.addClass("pdf-to-md-handwrite-modal");
+    containerEl.style.display = "block";
+    Object.assign(modalEl.style, {
+      position: "absolute",
+      top: "0",
+      left: "0",
+      width: "100%",
+      height: "100%",
+      maxWidth: "100%",
+      maxHeight: "100%",
+      borderRadius: "0",
+      margin: "0",
+      transform: "none"
+    });
+    const toolbar = contentEl.createDiv("handwrite-toolbar");
+    const widthSlider = toolbar.createEl("input", {
+      type: "range",
+      attr: { min: "1", max: "20", value: "3", title: "Pen width" }
+    });
+    widthSlider.addEventListener("input", () => {
+      this.strokeWidth = parseInt(widthSlider.value);
+    });
+    const colorPicker = toolbar.createEl("input", {
+      type: "color",
+      attr: { value: "#000000", title: "Pen color" }
+    });
+    colorPicker.addEventListener("input", () => {
+      this.strokeColor = colorPicker.value;
+    });
+    toolbar.createEl("button", { text: "Undo" }).addEventListener("click", () => this.undo());
+    toolbar.createEl("button", { text: "Clear" }).addEventListener("click", () => this.clear());
+    toolbar.createEl("button", { text: "Save & Insert", cls: "mod-cta" }).addEventListener("click", () => this.saveAndInsert());
+    this.canvas = contentEl.createEl("canvas");
+    this.setupCanvas();
+    this.setupPointerEvents();
+  }
+  setupCanvas() {
+    requestAnimationFrame(() => {
+      const dpr = window.devicePixelRatio || 1;
+      const toolbarEl = this.contentEl.querySelector(".handwrite-toolbar");
+      const toolbarH = toolbarEl ? toolbarEl.offsetHeight : 0;
+      const width = window.innerWidth;
+      const height = window.innerHeight - toolbarH;
+      this.canvas.width = Math.floor(width * dpr);
+      this.canvas.height = Math.floor(height * dpr);
+      this.canvas.style.width = `${width}px`;
+      this.canvas.style.height = `${height}px`;
+      const ctx = this.canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx)
+        throw new Error("Canvas context unavailable");
+      this.ctx = ctx;
+      this.ctx.scale(dpr, dpr);
+      this.ctx.fillStyle = "#ffffff";
+      this.ctx.fillRect(0, 0, width, height);
+      this.ctx.lineCap = "round";
+      this.ctx.lineJoin = "round";
+    });
+  }
+  setupPointerEvents() {
+    this.canvas.addEventListener("pointerdown", (e) => {
+      this.saveHistory();
+      this.isDrawing = true;
+      const { x, y } = this.getPos(e);
+      this.lastX = x;
+      this.lastY = y;
+      this.canvas.setPointerCapture(e.pointerId);
+    });
+    this.canvas.addEventListener("pointermove", (e) => {
+      if (!this.isDrawing)
+        return;
+      const { x, y } = this.getPos(e);
+      this.ctx.strokeStyle = this.strokeColor;
+      this.ctx.lineWidth = this.strokeWidth;
+      this.ctx.beginPath();
+      this.ctx.moveTo(this.lastX, this.lastY);
+      this.ctx.lineTo(x, y);
+      this.ctx.stroke();
+      this.lastX = x;
+      this.lastY = y;
+    });
+    this.canvas.addEventListener("pointerup", () => {
+      this.isDrawing = false;
+    });
+  }
+  getPos(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    };
+  }
+  saveHistory() {
+    if (this.history.length >= this.MAX_HISTORY) {
+      this.history.shift();
+    }
+    this.history.push(this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height));
+  }
+  undo() {
+    const last = this.history.pop();
+    if (last)
+      this.ctx.putImageData(last, 0, 0);
+  }
+  clear() {
+    this.saveHistory();
+    const dpr = window.devicePixelRatio || 1;
+    this.ctx.fillStyle = "#ffffff";
+    this.ctx.fillRect(0, 0, this.canvas.width / dpr, this.canvas.height / dpr);
+  }
+  async saveAndInsert() {
+    const blob = await new Promise((resolve) => this.canvas.toBlob(resolve, "image/png"));
+    if (!blob) {
+      new import_obsidian4.Notice("Failed to export canvas");
+      return;
+    }
+    const ts = new Date().toISOString().replace(/[-:T.Z]/g, "");
+    const folder = this.plugin.settings.handwriteFolder || "";
+    const baseName = `handwrite_${ts}`;
+    let filename = `${baseName}.png`;
+    let path = folder ? `${folder}/${filename}` : filename;
+    let suffix = 1;
+    while (this.app.vault.getAbstractFileByPath(path)) {
+      filename = `${baseName}_${suffix}.png`;
+      path = folder ? `${folder}/${filename}` : filename;
+      suffix++;
+    }
+    const buffer = await blob.arrayBuffer();
+    try {
+      await this.app.vault.createBinary(path, buffer);
+    } catch (e) {
+      new import_obsidian4.Notice(`Failed to save: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    const editor = this.app.workspace.activeEditor?.editor;
+    if (editor) {
+      const link = `![](${path})`;
+      editor.replaceSelection(link + "\n");
+      new import_obsidian4.Notice(`\u2713 Saved and inserted ${filename}`);
+    } else {
+      new import_obsidian4.Notice(`\u2713 Saved ${filename} (no active editor)`);
+    }
+    this.close();
+  }
+  onClose() {
+    this.containerEl.style.removeProperty("display");
+    ["position", "top", "left", "width", "height", "max-width", "max-height", "border-radius", "margin", "transform"].forEach((p) => this.modalEl.style.removeProperty(p));
+    this.contentEl.empty();
+  }
+};
+
 // main.ts
-var PDFToMDPlugin = class extends import_obsidian4.Plugin {
+var PDFToMDPlugin = class extends import_obsidian5.Plugin {
   constructor() {
     super(...arguments);
     this.apiKeys = new Map();
@@ -27882,9 +28053,19 @@ var PDFToMDPlugin = class extends import_obsidian4.Plugin {
     await this.loadSettings();
     this.loadApiKeysFromEnv();
     this.addSettingTab(new PDFToMDSettingTab(this.app, this));
+    this.addRibbonIcon("pencil", "Handwrite note", () => {
+      new HandwriteModal(this.app, this).open();
+    });
+    this.addCommand({
+      id: "open-handwrite-modal",
+      name: "Open handwriting canvas",
+      callback: () => {
+        new HandwriteModal(this.app, this).open();
+      }
+    });
     const supportedImageExtensions = ["png", "jpg", "jpeg", "webp"];
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file, source) => {
-      if (!(file instanceof import_obsidian4.TFile))
+      if (!(file instanceof import_obsidian5.TFile))
         return;
       if (file.extension === "pdf") {
         menu.addItem((item) => item.setTitle("Convert to Markdown").setIcon("file-text").onClick(() => this.convertFile(file)));
@@ -27934,7 +28115,7 @@ var PDFToMDPlugin = class extends import_obsidian4.Plugin {
       const isPdf = file.extension === "pdf";
       const isImage = ["png", "jpg", "jpeg", "webp"].includes(file.extension.toLowerCase());
       if (!isPdf && !isImage) {
-        new import_obsidian4.Notice("\u274C Unsupported file type. Only PDF, PNG, JPG, JPEG, and WebP are supported.", 5e3);
+        new import_obsidian5.Notice("\u274C Unsupported file type. Only PDF, PNG, JPG, JPEG, and WebP are supported.", 5e3);
         return;
       }
       const apiKey = this.getApiKey(this.settings.provider);
@@ -27953,7 +28134,7 @@ var PDFToMDPlugin = class extends import_obsidian4.Plugin {
         };
         const envVar = envVarMap[this.settings.provider] ?? "API_KEY";
         const providerName = providerNameMap[this.settings.provider] ?? this.settings.provider;
-        new import_obsidian4.Notice(`\u274C ${providerName} API Key not configured!
+        new import_obsidian5.Notice(`\u274C ${providerName} API Key not configured!
 
 Please set environment variable: ${envVar}
 
@@ -27961,7 +28142,7 @@ Then restart Obsidian.`, 1e4);
         console.error(`API Key missing. Environment variable: ${envVar}`);
         return;
       }
-      const notice = new import_obsidian4.Notice(`Starting ${isPdf ? "PDF" : "Image"} conversion...`, 0);
+      const notice = new import_obsidian5.Notice(`Starting ${isPdf ? "PDF" : "Image"} conversion...`, 0);
       const data = await this.app.vault.readBinary(file);
       const provider = this.createProvider(apiKey);
       const converter = new PDFConverter(provider, {
@@ -27986,10 +28167,10 @@ Then restart Obsidian.`, 1e4);
       const outputPath = this.getOutputPath(file);
       const existingFile = this.app.vault.getAbstractFileByPath(outputPath);
       if (existingFile && this.settings.conflictResolution === "skip") {
-        new import_obsidian4.Notice(`File already exists: ${outputPath}. Skipped.`, 5e3);
+        new import_obsidian5.Notice(`File already exists: ${outputPath}. Skipped.`, 5e3);
         return;
       }
-      if (existingFile && existingFile instanceof import_obsidian4.TFile) {
+      if (existingFile && existingFile instanceof import_obsidian5.TFile) {
         await this.app.vault.modify(existingFile, markdown);
       } else {
         await this.app.vault.create(outputPath, markdown);
@@ -27999,11 +28180,11 @@ Then restart Obsidian.`, 1e4);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes("Unauthorized") || message.includes("API key")) {
-        new import_obsidian4.Notice(`\u274C API Error: Invalid or expired API key. Please check your environment variables.`, 1e4);
+        new import_obsidian5.Notice(`\u274C API Error: Invalid or expired API key. Please check your environment variables.`, 1e4);
       } else if (message.includes("timeout")) {
-        new import_obsidian4.Notice(`\u274C Conversion timeout. Try increasing timeout in plugin settings or use a faster model.`, 1e4);
+        new import_obsidian5.Notice(`\u274C Conversion timeout. Try increasing timeout in plugin settings or use a faster model.`, 1e4);
       } else {
-        new import_obsidian4.Notice(`Error: ${message}`, 1e4);
+        new import_obsidian5.Notice(`Error: ${message}`, 1e4);
       }
       console.error("Conversion error:", error);
     }
@@ -28093,15 +28274,15 @@ Then restart Obsidian.`, 1e4);
     try {
       const editor = this.app.workspace.activeEditor?.editor;
       if (!editor) {
-        new import_obsidian4.Notice("\u274C No active editor found");
+        new import_obsidian5.Notice("\u274C No active editor found");
         return;
       }
       const apiKey = this.getApiKey(this.settings.provider);
       if (!apiKey) {
-        new import_obsidian4.Notice("\u274C API Key not configured");
+        new import_obsidian5.Notice("\u274C API Key not configured");
         return;
       }
-      const notice = new import_obsidian4.Notice("Converting image...", 0);
+      const notice = new import_obsidian5.Notice("Converting image...", 0);
       const imageData = await this.app.vault.readBinary(file);
       const provider = this.createProvider(apiKey);
       const converter = new PDFConverter(provider, {
@@ -28121,7 +28302,7 @@ Then restart Obsidian.`, 1e4);
         }
       }
       if (insertLine === -1) {
-        new import_obsidian4.Notice("\u274C Could not find image line in editor");
+        new import_obsidian5.Notice("\u274C Could not find image line in editor");
         return;
       }
       const newContent = lines.slice(0, insertLine + 1).join("\n") + "\n\n" + markdown + "\n\n" + lines.slice(insertLine + 1).join("\n");
@@ -28129,7 +28310,7 @@ Then restart Obsidian.`, 1e4);
       notice.setMessage(`\u2713 Image converted and inserted`);
       setTimeout(() => notice.hide(), 2e3);
     } catch (error) {
-      new import_obsidian4.Notice(`Error: ${error instanceof Error ? error.message : String(error)}`, 1e4);
+      new import_obsidian5.Notice(`Error: ${error instanceof Error ? error.message : String(error)}`, 1e4);
       console.error("Image conversion error:", error);
     }
   }
@@ -28137,26 +28318,26 @@ Then restart Obsidian.`, 1e4);
     try {
       const editor = this.app.workspace.activeEditor?.editor;
       if (!editor) {
-        new import_obsidian4.Notice("\u274C No active editor found");
+        new import_obsidian5.Notice("\u274C No active editor found");
         return;
       }
       const vaultPath = this.resolveImagePath(src);
       if (!vaultPath) {
-        new import_obsidian4.Notice("\u274C Could not resolve image path");
+        new import_obsidian5.Notice("\u274C Could not resolve image path");
         return;
       }
       const imageFile = this.app.vault.getAbstractFileByPath(vaultPath);
-      if (!imageFile || !(imageFile instanceof import_obsidian4.TFile)) {
-        new import_obsidian4.Notice("\u274C Image file not found in vault");
+      if (!imageFile || !(imageFile instanceof import_obsidian5.TFile)) {
+        new import_obsidian5.Notice("\u274C Image file not found in vault");
         return;
       }
       const imageData = await this.app.vault.readBinary(imageFile);
       const apiKey = this.getApiKey(this.settings.provider);
       if (!apiKey) {
-        new import_obsidian4.Notice("\u274C API Key not configured");
+        new import_obsidian5.Notice("\u274C API Key not configured");
         return;
       }
-      const notice = new import_obsidian4.Notice("Converting image...", 0);
+      const notice = new import_obsidian5.Notice("Converting image...", 0);
       const provider = this.createProvider(apiKey);
       const converter = new PDFConverter(provider, {
         timeout: this.settings.timeout * 1e3,
@@ -28173,7 +28354,7 @@ Then restart Obsidian.`, 1e4);
         }
       }
       if (insertLine === -1) {
-        new import_obsidian4.Notice("\u274C Could not find image line in editor");
+        new import_obsidian5.Notice("\u274C Could not find image line in editor");
         return;
       }
       const newContent = lines.slice(0, insertLine + 1).join("\n") + "\n\n" + markdown + "\n\n" + lines.slice(insertLine + 1).join("\n");
@@ -28181,7 +28362,7 @@ Then restart Obsidian.`, 1e4);
       notice.setMessage(`\u2713 Image converted and inserted`);
       setTimeout(() => notice.hide(), 2e3);
     } catch (error) {
-      new import_obsidian4.Notice(`Error: ${error instanceof Error ? error.message : String(error)}`, 1e4);
+      new import_obsidian5.Notice(`Error: ${error instanceof Error ? error.message : String(error)}`, 1e4);
       console.error("Image conversion error:", error);
     }
   }
