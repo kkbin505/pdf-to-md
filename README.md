@@ -6,6 +6,16 @@ This tool converts handwritten notes to Markdown using AI, designed as a seamles
 ![alt text](img/obsidian_pdf_to_md.gif)
 
 **[中文文档](README_zh.md)** | **English**
+---
+
+## 📖 A little history
+
+While studying control theory, I fell in love with the handwriting experience of the **iFlytek Smart Notebook**. However, organizing notes in **Obsidian** proved frustrating: the native OCR was terrible at recognizing mathematical formulas.
+
+I developed this plugin to solve that problem. It leverages powerful Vision Language Models (**Qwen-VL**, **GPT-5.4**, and **Gemini**) to provide:
+- **Accurate Mixed Recognition:** Seamlessly handles text and complex formulas
+- **LaTeX Math Formulas:** Converts equations into clear Obsidian-renderable LaTeX ($...$ and $$...$$)
+- **Cost-Effective & Flexible:** Choose cheap, fast, or ultra-accurate models inside Obsidian
 
 ---
 
@@ -15,7 +25,7 @@ An all-in-one Obsidian plugin that converts handwritten PDFs to Markdown in a si
 
 **Key Features:**
 - 📄 Right-click any PDF → "Convert to Markdown"
-- 🤖 Support for GPT-4o, GPT-5.4, Alibaba Qwen (千问), and Google Gemini
+- 🤖 Support for GPT, Alibaba Qwen (千问), Claude and Google Gemini
 - 📊 Real-time progress tracking with visual progress bar
 - 🔐 Secure API key management (read-only environment variables check)
 - ⚙️ Configurable DPI, timeout, retry, and file conflict handling
@@ -28,15 +38,31 @@ An all-in-one Obsidian plugin that converts handwritten PDFs to Markdown in a si
 3. Click Install and Enable
 
 **Method 2: Manual Installation**
-1. Download the latest release from [GitHub Releases](https://github.com/kkbin505/pdf-to-md/releases)
-2. Extract files to your Vault:
+1. Download `main.js` and `manifest.json` from the latest [GitHub Release](https://github.com/kkbin505/pdf-to-md/releases)
+2. Copy them into your vault:
    ```
    <your-vault>/.obsidian/plugins/pdf-to-md/
    ├── main.js
-   ├── pdf.worker.min.js
    └── manifest.json
    ```
 3. Restart Obsidian and enable the plugin
+
+**Method 3: Build from Source**
+1. Clone the repo:
+   ```bash
+   git clone https://github.com/kkbin505/pdf-to-md.git
+   cd pdf-to-md
+   ```
+2. Install dependencies and build:
+   ```bash
+   npm install
+   npm run build
+   ```
+3. Copy the built files into your vault:
+   ```bash
+   cp main.js manifest.json <your-vault>/.obsidian/plugins/pdf-to-md/
+   ```
+4. Restart Obsidian and enable the plugin
 
 ### Plugin Quick Start
 
@@ -48,20 +74,16 @@ An all-in-one Obsidian plugin that converts handwritten PDFs to Markdown in a si
 - **Alibaba Qwen (Recommended):** https://dashscope.console.aliyun.com/apiKey
 - **OpenAI:** https://platform.openai.com/api-keys
 - **Google Gemini:** https://aistudio.google.com/
+- **Anthropic Claude:** https://platform.claude.com/settings/workspaces/default/keys
 
 **Set Environment Variables:**
 
-**Windows (PowerShell - Run as Administrator):**
-```powershell
-# Alibaba Qwen
-[System.Environment]::SetEnvironmentVariable('DASHSCOPE_API_KEY', 'sk-xxx...', 'User')
-
-# OpenAI
-[System.Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-proj-xxx...', 'User')
-
-# Google Gemini
-[System.Environment]::SetEnvironmentVariable('GEMINI_API_KEY', 'AIzaSyxxx...', 'User')
-```
+| Provider | Env Variable | Example |
+|---|---|---|
+| Alibaba Qwen | `DASHSCOPE_API_KEY` | `sk-xxx...` |
+| OpenAI | `OPENAI_API_KEY` | `sk-proj-xxx...` |
+| Google Gemini | `GEMINI_API_KEY` | `AIzaSyxxx...` |
+| Anthropic Claude | `ANTHROPIC_API_KEY` | `sk-ant-xxx...` |
 
 **Mac/Linux:**
 ```bash
@@ -69,31 +91,29 @@ An all-in-one Obsidian plugin that converts handwritten PDFs to Markdown in a si
 export DASHSCOPE_API_KEY='sk-xxx...'
 export OPENAI_API_KEY='sk-proj-xxx...'
 export GEMINI_API_KEY='AIzaSyxxx...'
+export ANTHROPIC_API_KEY='sk-ant-xxx...'
 
 # Save and reload:
 source ~/.bashrc  # or source ~/.zshrc
 ```
-
 **⚠️ Restart Obsidian** after setting environment variables (complete restart required, not just reload).
 
 **2️⃣ Select AI Provider**
 
 Open Obsidian Settings → PDF to Markdown:
-- Select the AI model directly from the unified **Model** dropdown (supporting various GPT-4o, GPT-5.4, Qwen, and Gemini models).
+- Select the AI model directly from the unified **Model** dropdown.
 
-**3️⃣ Convert PDF**
+**3️⃣ Convert PDF/image**
 
-1. Find PDF in Obsidian file browser
+1. Find PDF/image in Obsidian file browser
 2. Right-click → **"Convert to Markdown"**
 3. Wait for conversion (progress bar shows status)
 4. Converted `.md` file is auto-saved
 
-```
-Example:
-Input:  my_notes.pdf
-Output: my_notes_qwen.md         (if using Qwen)
-        my_notes_gpt-5.4.md      (if using GPT 5.4)
-```
+**4️⃣ Convert images embedded in notes** *(new)*
+
+Right-click any image inside an open note → **"Convert Image to Markdown"**. The recognized text and formulas are inserted directly below the image in the same note — no new file is created.
+
 
 ![pdf](example/page1.jpg)
 
@@ -107,10 +127,25 @@ Output: my_notes_qwen.md         (if using Qwen)
 
 ### Supported AI Models
 
-| Provider | Model | Cost/Page | Speed | Quality |
-|---|---|---|---|---|
-| **Alibaba Qwen** 🏆 | qwen-vl-max | ¥0.00345 | 15-30s | Excellent |
-| **OpenAI** | gpt-5.4-mini | $0.003 | 5-10s | Excellent+ |
+#### 🧪 A4 Handwritten Notes Test Data (2 pages of Scratch.pdf)
+
+| Provider | Model | Input/Output | Quality | **Cost/Page** | Rating |
+|---|---|---|---|---|---|
+| **Gemini** 🏆 | gemini-2.5-flash | 638/552 | Excellent | **$0** (Free) | ⭐⭐⭐⭐⭐ |
+| **Qwen** | qwen-vl-max | 2824/589 | Excellent | **$0.00048** | ⭐⭐⭐⭐⭐ |
+| **Claude** | claude-haiku-4-5-20251001 | 3156/629 | Excellent | **$0.00315** | ⭐⭐⭐⭐ |
+| **OpenAI** | gpt-5.4-mini | 5550/566 | Excellent | **$0.00335** | ⭐⭐⭐⭐ |
+| **iFlytek** | Spark | - | Poor | **$0** (Free) | ⭐ |
+
+#### 💡 Recommendation Guide
+
+| Priority | Recommended | Cost/Page | Reason |
+|---|---|---|---|
+| **1️⃣ First Choice** | Gemini | $0 | free, excellent recognition, just manage quota |
+| **2️⃣ China Users** | Qwen | $0.00048 | Cheapest paid option, stable quality, fast |
+| **3️⃣ Cost Conscious** | OpenAI | $0.00335 | Most tokens but lowest unit price, competitive cost |
+| **❌ Not Recommended** | iFlytek | $0 | Free but poor formula recognition, text-only |
+
 
 ### Plugin Settings
 
@@ -142,16 +177,7 @@ See actual output from different models:
 
 ---
 
-## 📖 Background
 
-While studying control theory, I fell in love with the handwriting experience of the **iFlytek Smart Notebook**. However, organizing notes in **Obsidian** proved frustrating: the native OCR was terrible at recognizing mathematical formulas.
-
-I developed this plugin to solve that problem. It leverages powerful Vision Language Models (**Qwen-VL**, **GPT-4o/GPT-5.4**, and **Gemini**) to provide:
-- **Accurate Mixed Recognition:** Seamlessly handles text and complex formulas
-- **LaTeX Math Formulas:** Converts equations into clear Obsidian-renderable LaTeX ($...$ and $$...$$)
-- **Cost-Effective & Flexible:** Choose cheap, fast, or ultra-accurate models inside Obsidian
-
----
 
 ## 🤝 Contributing
 
