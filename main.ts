@@ -1,4 +1,4 @@
-import { Plugin, Notice, TFile } from 'obsidian';
+import { Plugin, Notice, TFile, Menu } from 'obsidian';
 import * as pdfjsLib from 'pdfjs-dist';
 import { PDFToMDSettings, PDFToMDSettingTab, DEFAULT_SETTINGS, MODEL_OPTIONS } from './src/settings';
 import { PDFConverter } from './src/converter';
@@ -26,14 +26,36 @@ export default class PDFToMDPlugin extends Plugin {
 
     this.addSettingTab(new PDFToMDSettingTab(this.app, this));
 
+    const supportedImageExtensions = ['png', 'jpg', 'jpeg', 'webp'];
+
     this.registerEvent(
-      this.app.workspace.on('file-menu', (menu, file) => {
-        if (file instanceof TFile && file.extension === 'pdf') {
+      this.app.workspace.on('file-menu', (menu, file, source) => {
+        if (!(file instanceof TFile)) return;
+
+        if (file.extension === 'pdf') {
           menu.addItem(item =>
             item
               .setTitle('Convert to Markdown')
               .setIcon('file-text')
-              .onClick(() => this.convertPdf(file))
+              .onClick(() => this.convertFile(file))
+          );
+        } else if (supportedImageExtensions.includes(file.extension.toLowerCase())) {
+          // Detect if right-click came from inside an editor (link/embed menu)
+          // vs from file explorer
+          const fromEditor = source === 'link-context-menu' || source === 'embed-context-menu';
+
+          menu.addItem(item =>
+            item
+              .setTitle('Convert Image to Markdown')
+              .setIcon('image')
+              .setSection('pdf-to-md')
+              .onClick(() => {
+                if (fromEditor) {
+                  this.convertImageInNoteFromFile(file);
+                } else {
+                  this.convertFile(file);
+                }
+              })
           );
         }
       })
@@ -74,8 +96,16 @@ export default class PDFToMDPlugin extends Plugin {
     return this.apiKeys.get(provider) || null;
   }
 
-  private async convertPdf(file: TFile) {
+  private async convertFile(file: TFile) {
     try {
+      const isPdf = file.extension === 'pdf';
+      const isImage = ['png', 'jpg', 'jpeg', 'webp'].includes(file.extension.toLowerCase());
+
+      if (!isPdf && !isImage) {
+        new Notice('❌ Unsupported file type. Only PDF, PNG, JPG, JPEG, and WebP are supported.', 5000);
+        return;
+      }
+
       // Check if API key is configured
       const apiKey = this.getApiKey(this.settings.provider);
       if (!apiKey) {
@@ -102,10 +132,9 @@ export default class PDFToMDPlugin extends Plugin {
         return;
       }
 
-      const notice = new Notice('Starting PDF conversion...', 0);
+      const notice = new Notice(`Starting ${isPdf ? 'PDF' : 'Image'} conversion...`, 0);
 
       const data = await this.app.vault.readBinary(file);
-      const pdfBuffer = data;
 
       const provider = this.createProvider(apiKey);
       const converter = new PDFConverter(provider, {
@@ -124,7 +153,12 @@ export default class PDFToMDPlugin extends Plugin {
         notice.setMessage(message);
       });
 
-      const markdown = await converter.convertPdfBuffer(pdfBuffer, this.settings.dpi);
+      let markdown: string;
+      if (isPdf) {
+        markdown = await converter.convertPdfBuffer(data, this.settings.dpi);
+      } else {
+        markdown = await converter.convertImageBuffer(data);
+      }
 
       // Determine output path based on conflict resolution strategy
       const outputPath = this.getOutputPath(file);
@@ -163,7 +197,8 @@ export default class PDFToMDPlugin extends Plugin {
   }
 
   private getOutputPath(file: TFile): string {
-    const basePath = file.path.replace('.pdf', '');
+    const ext = file.extension === 'pdf' ? '.pdf' : `.${file.extension}`;
+    const basePath = file.path.replace(ext, '');
     const baseName = basePath.split('/').pop() || 'output';
     const dir = basePath.substring(0, basePath.length - baseName.length);
 
@@ -268,5 +303,177 @@ export default class PDFToMDPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+
+  private async convertImageInNoteFromFile(file: TFile) {
+    try {
+      const editor = this.app.workspace.activeEditor?.editor;
+      if (!editor) {
+        new Notice('❌ No active editor found');
+        return;
+      }
+
+      const apiKey = this.getApiKey(this.settings.provider);
+      if (!apiKey) {
+        new Notice('❌ API Key not configured');
+        return;
+      }
+
+      const notice = new Notice('Converting image...', 0);
+      const imageData = await this.app.vault.readBinary(file);
+
+      const provider = this.createProvider(apiKey);
+      const converter = new PDFConverter(provider, {
+        timeout: this.settings.timeout * 1000,
+        maxRetries: this.settings.maxRetries,
+      });
+
+      const markdown = await converter.convertImageBuffer(imageData);
+
+      // Find the line containing the image link in the editor
+      const content = editor.getValue();
+      const lines = content.split('\n');
+      const fileName = file.name;
+      const filePath = file.path;
+      let insertLine = -1;
+
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes(fileName) || lines[i].includes(filePath)) {
+          insertLine = i;
+          break;
+        }
+      }
+
+      if (insertLine === -1) {
+        new Notice('❌ Could not find image line in editor');
+        return;
+      }
+
+      const newContent =
+        lines.slice(0, insertLine + 1).join('\n') +
+        '\n\n' + markdown +
+        '\n\n' +
+        lines.slice(insertLine + 1).join('\n');
+
+      editor.setValue(newContent);
+      notice.setMessage(`✓ Image converted and inserted`);
+      setTimeout(() => notice.hide(), 2000);
+    } catch (error) {
+      new Notice(`Error: ${error instanceof Error ? error.message : String(error)}`, 10000);
+      console.error('Image conversion error:', error);
+    }
+  }
+
+  private async convertImageInNote(imgElement: HTMLImageElement, src: string) {
+    try {
+      // Get the editor view
+      const editor = this.app.workspace.activeEditor?.editor;
+      if (!editor) {
+        new Notice('❌ No active editor found');
+        return;
+      }
+
+      // Resolve vault path from image src
+      const vaultPath = this.resolveImagePath(src);
+      if (!vaultPath) {
+        new Notice('❌ Could not resolve image path');
+        return;
+      }
+
+      // Read the image file
+      const imageFile = this.app.vault.getAbstractFileByPath(vaultPath);
+      if (!imageFile || !(imageFile instanceof TFile)) {
+        new Notice('❌ Image file not found in vault');
+        return;
+      }
+
+      const imageData = await this.app.vault.readBinary(imageFile);
+
+      // Check API key
+      const apiKey = this.getApiKey(this.settings.provider);
+      if (!apiKey) {
+        new Notice('❌ API Key not configured');
+        return;
+      }
+
+      const notice = new Notice('Converting image...', 0);
+
+      const provider = this.createProvider(apiKey);
+      const converter = new PDFConverter(provider, {
+        timeout: this.settings.timeout * 1000,
+        maxRetries: this.settings.maxRetries,
+      });
+
+      const markdown = await converter.convertImageBuffer(imageData);
+
+      // Find the image line in the editor and insert result below it
+      const content = editor.getValue();
+      const lines = content.split('\n');
+      let insertLine = -1;
+
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes(vaultPath)) {
+          insertLine = i;
+          break;
+        }
+      }
+
+      if (insertLine === -1) {
+        new Notice('❌ Could not find image line in editor');
+        return;
+      }
+
+      // Insert result after the image line
+      const newContent =
+        lines.slice(0, insertLine + 1).join('\n') +
+        '\n\n' + markdown +
+        '\n\n' +
+        lines.slice(insertLine + 1).join('\n');
+
+      editor.setValue(newContent);
+      notice.setMessage(`✓ Image converted and inserted`);
+      setTimeout(() => notice.hide(), 2000);
+    } catch (error) {
+      new Notice(`Error: ${error instanceof Error ? error.message : String(error)}`, 10000);
+      console.error('Image conversion error:', error);
+    }
+  }
+
+  private resolveImagePath(src: string): string | null {
+    try {
+      // If it's a relative path from markdown, resolve it
+      if (src.startsWith('../') || src.startsWith('./')) {
+        // Get current file path and resolve relative path
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) return null;
+
+        const dir = activeFile.parent?.path || '';
+        // Simple path resolution
+        let resolved = src;
+        if (src.startsWith('../')) {
+          const parts = dir.split('/');
+          let upCount = 0;
+          let remaining = src;
+          while (remaining.startsWith('../')) {
+            upCount++;
+            remaining = remaining.slice(3);
+          }
+          const newPath = parts.slice(0, parts.length - upCount).join('/');
+          resolved = newPath ? newPath + '/' + remaining : remaining;
+        } else if (src.startsWith('./')) {
+          resolved = (dir ? dir + '/' : '') + src.slice(2);
+        }
+        return resolved;
+      }
+
+      // If it's already a vault path
+      if (!src.startsWith('http') && !src.startsWith('data:')) {
+        return src;
+      }
+    } catch (e) {
+      console.error('Error resolving image path:', e);
+    }
+
+    return null;
   }
 }

@@ -1,5 +1,5 @@
 import { ModelProvider } from './providers/base';
-import { pdfToImages } from './pdf';
+import { pdfToImages } from './image';
 
 export interface ConversionOptions {
   timeout?: number;
@@ -81,6 +81,27 @@ export class PDFConverter {
     }
 
     throw lastError || new Error(`Failed to recognize page ${pageNum} after ${this.maxRetries} attempts`);
+  }
+
+  async convertImageBuffer(imageData: ArrayBuffer): Promise<string> {
+    try {
+      this.emitProgress(0, 1, 'Converting image...');
+      const imageBase64 = this.arrayBufferToBase64(imageData);
+      const result = await this.recognizeWithRetry(imageBase64, 1);
+      this.emitProgress(1, 1, 'Done');
+      return result;
+    } catch (error) {
+      throw new Error(`Image conversion failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private arrayBufferToBase64(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
   }
 
   private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
