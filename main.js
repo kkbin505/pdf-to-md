@@ -27818,6 +27818,17 @@ var AnthropicProvider = class {
     this.apiKey = config.apiKey;
     this.model = config.model;
   }
+  getMediaType(imageBase64) {
+    if (imageBase64.startsWith("/9j/"))
+      return "image/jpeg";
+    if (imageBase64.startsWith("iVBORw0KGgo"))
+      return "image/png";
+    if (imageBase64.startsWith("UklGR"))
+      return "image/webp";
+    if (imageBase64.startsWith("R0lGOD"))
+      return "image/gif";
+    return "image/png";
+  }
   async recognize(imageBase64) {
     const payload = {
       model: this.model,
@@ -27830,7 +27841,7 @@ var AnthropicProvider = class {
               type: "image",
               source: {
                 type: "base64",
-                media_type: "image/png",
+                media_type: this.getMediaType(imageBase64),
                 data: imageBase64
               }
             },
