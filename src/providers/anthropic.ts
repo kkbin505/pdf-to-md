@@ -10,6 +10,14 @@ export class AnthropicProvider implements ModelProvider {
     this.model = config.model;
   }
 
+  private getMediaType(imageBase64: string): 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' {
+    if (imageBase64.startsWith('/9j/')) return 'image/jpeg';
+    if (imageBase64.startsWith('iVBORw0KGgo')) return 'image/png';
+    if (imageBase64.startsWith('UklGR')) return 'image/webp';
+    if (imageBase64.startsWith('R0lGOD')) return 'image/gif';
+    return 'image/png';
+  }
+
   async recognize(imageBase64: string): Promise<string> {
     const payload = {
       model: this.model,
@@ -22,7 +30,7 @@ export class AnthropicProvider implements ModelProvider {
               type: 'image',
               source: {
                 type: 'base64',
-                media_type: 'image/png',
+                media_type: this.getMediaType(imageBase64),
                 data: imageBase64,
               },
             },

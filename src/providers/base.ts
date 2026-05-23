@@ -2,7 +2,7 @@ export interface ModelProvider {
   recognize(imageBase64: string): Promise<string>;
 }
 
-export type ProviderType = 'openai' | 'qwen' | 'gemini' | 'claude';
+export type ProviderType = 'openai' | 'qwen' | 'gemini' | 'claude' | 'ollama';
 
 export interface ProviderConfig {
   apiKey: string;

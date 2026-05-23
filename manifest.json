@@ -1,7 +1,7 @@
 {
   "id": "pdf-to-md",
   "name": "pdf-to-md",
-  "version": "0.1.7",
+  "version": "0.1.9",
   "minAppVersion": "0.15.0",
   "description": "Convert handwritten PDFs to Markdown with LaTeX formulas using AI (OpenAI GPT or Alibaba Qwen).",
   "author": "kkbin505",

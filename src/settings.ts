@@ -4,7 +4,7 @@ import PDFToMDPlugin from '../main';
 export interface ModelOption {
   id: string;
   name: string;
-  provider: 'openai' | 'qwen' | 'gemini' | 'claude';
+  provider: 'openai' | 'qwen' | 'gemini' | 'claude' | 'ollama';
   apiModel: string;
 }
 
@@ -25,15 +25,18 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: 'claude-opus-4-7', name: 'Anthropic Claude Opus 4', provider: 'claude', apiModel: 'claude-opus-4-7' },
   { id: 'claude-sonnet-4-6', name: 'Anthropic Claude Sonnet 4', provider: 'claude', apiModel: 'claude-sonnet-4-6' },
   { id: 'claude-haiku-4-5', name: 'Anthropic Claude Haiku 4.5', provider: 'claude', apiModel: 'claude-haiku-4-5-20251001' },
+  { id: 'ollama-local', name: 'Ollama (Local)', provider: 'ollama', apiModel: 'ollama' },
 ];
 
 export interface PDFToMDSettings {
-  provider: 'openai' | 'qwen' | 'gemini' | 'claude';
+  provider: 'openai' | 'qwen' | 'gemini' | 'claude' | 'ollama';
   selectedModelId: string;
   openaiModel: string;
   qwenModel: string;
   customBaseUrl: string;
   customModelName: string;
+  ollamaBaseUrl: string;
+  ollamaModel: string;
   dpi: number;
   timeout: number;
   maxRetries: number;
@@ -47,6 +50,8 @@ export const DEFAULT_SETTINGS: PDFToMDSettings = {
   qwenModel: 'qwen-vl-max',
   customBaseUrl: '',
   customModelName: '',
+  ollamaBaseUrl: 'http://localhost:11434/v1',
+  ollamaModel: 'gemma3:4b',
   dpi: 200,
   timeout: 60,
   maxRetries: 3,
@@ -65,16 +70,18 @@ export class PDFToMDSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    // 🔒 Security notice
-    const securityNotice = containerEl.createDiv('pdf-to-md-security-notice');
-    securityNotice.innerHTML = `
-      <div style="margin-bottom: 20px; padding: 12px; background: #f0f7ff; border-left: 4px solid #2196f3; border-radius: 4px;">
-        <strong>🔒 Security:</strong> API keys are read from environment variables only.
-        <strong>No API keys are stored on disk.</strong>
-        <br/>
-        <small>See <a href="https://github.com/kkbin505/pdf-to-md">documentation</a> for setup instructions.</small>
-      </div>
-    `;
+    // 🔒 Security notice (hidden for Ollama — no key needed)
+    if (this.plugin.settings.provider !== 'ollama') {
+      const securityNotice = containerEl.createDiv('pdf-to-md-security-notice');
+      securityNotice.innerHTML = `
+        <div style="margin-bottom: 20px; padding: 12px; background: #f0f7ff; border-left: 4px solid #2196f3; border-radius: 4px;">
+          <strong>🔒 Security:</strong> API keys are read from environment variables only.
+          <strong>No API keys are stored on disk.</strong>
+          <br/>
+          <small>See <a href="https://github.com/kkbin505/pdf-to-md">documentation</a> for setup instructions.</small>
+        </div>
+      `;
+    }
 
     // Model selection dropdown
     new Setting(containerEl)
@@ -208,7 +215,47 @@ export class PDFToMDSettingTab extends PluginSettingTab {
           'ANTHROPIC_API_KEY'
         );
         break;
+      case 'ollama':
+        this.addOllamaSettings();
+        break;
     }
+  }
+
+  private addOllamaSettings(): void {
+    const { containerEl } = this;
+
+    new Setting(containerEl)
+      .setName('Ollama Base URL')
+      .setDesc('URL of your local Ollama instance (default: http://localhost:11434/v1)')
+      .addText(text =>
+        text
+          .setPlaceholder('http://localhost:11434/v1')
+          .setValue(this.plugin.settings.ollamaBaseUrl)
+          .onChange(async value => {
+            this.plugin.settings.ollamaBaseUrl = value.trim() || 'http://localhost:11434/v1';
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Ollama Model')
+      .setDesc('Name of the vision model to use (must support image input, e.g. gemma3:4b, llava, llama3.2-vision)')
+      .addText(text =>
+        text
+          .setPlaceholder('gemma3:4b')
+          .setValue(this.plugin.settings.ollamaModel)
+          .onChange(async value => {
+            this.plugin.settings.ollamaModel = value.trim() || 'gemma3:4b';
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Ollama Status')
+      .setDesc('No API key required — Ollama runs locally')
+      .addText(text =>
+        text.setValue('✓ Local — no key needed').setDisabled(true)
+      );
   }
 
   private addProviderSetting(
