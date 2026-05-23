@@ -106,9 +106,9 @@ export default class PDFToMDPlugin extends Plugin {
         return;
       }
 
-      // Check if API key is configured
-      const apiKey = this.getApiKey(this.settings.provider);
-      if (!apiKey) {
+      // Check if API key is configured (Ollama is local — no key needed)
+      const apiKey = this.settings.provider === 'ollama' ? '' : (this.getApiKey(this.settings.provider) ?? '');
+      if (!apiKey && this.settings.provider !== 'ollama') {
         const envVarMap: Record<string, string> = {
           openai: 'OPENAI_API_KEY',
           qwen: 'DASHSCOPE_API_KEY',
@@ -229,6 +229,9 @@ export default class PDFToMDPlugin extends Plugin {
     if (selectedModel.provider === 'qwen') {
       return 'qwen';
     }
+    if (selectedModel.provider === 'ollama') {
+      return settings.ollamaModel.replace(':', '-');
+    }
     return selectedModel.id;
   }
 
@@ -275,6 +278,15 @@ export default class PDFToMDPlugin extends Plugin {
       case 'claude':
         return new AnthropicProvider({ apiKey: apiKey, model: modelName });
 
+      case 'ollama':
+        return new OpenAICompatibleProvider(
+          {
+            apiKey: '',
+            model: settings.ollamaModel || 'gemma3:4b',
+          },
+          settings.ollamaBaseUrl || 'http://localhost:11434/v1'
+        );
+
       default:
         throw new Error(`Unknown provider: ${settings.provider}`);
     }
@@ -313,8 +325,8 @@ export default class PDFToMDPlugin extends Plugin {
         return;
       }
 
-      const apiKey = this.getApiKey(this.settings.provider);
-      if (!apiKey) {
+      const apiKey = this.settings.provider === 'ollama' ? '' : (this.getApiKey(this.settings.provider) ?? '');
+      if (!apiKey && this.settings.provider !== 'ollama') {
         new Notice('❌ API Key not configured');
         return;
       }
@@ -390,8 +402,8 @@ export default class PDFToMDPlugin extends Plugin {
       const imageData = await this.app.vault.readBinary(imageFile);
 
       // Check API key
-      const apiKey = this.getApiKey(this.settings.provider);
-      if (!apiKey) {
+      const apiKey = this.settings.provider === 'ollama' ? '' : (this.getApiKey(this.settings.provider) ?? '');
+      if (!apiKey && this.settings.provider !== 'ollama') {
         new Notice('❌ API Key not configured');
         return;
       }

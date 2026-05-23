@@ -25,10 +25,15 @@ An all-in-one Obsidian plugin that converts handwritten PDFs to Markdown in a si
 
 **Key Features:**
 - 📄 Right-click any PDF → "Convert to Markdown"
-- 🤖 Support for GPT, Alibaba Qwen (千问), Claude and Google Gemini
 - 📊 Real-time progress tracking with visual progress bar
 - 🔐 Secure API key management (read-only environment variables check)
 - ⚙️ Configurable DPI, timeout, retry, and file conflict handling
+- 🤖 Support
+   - GPT
+   - Alibaba Qwen (千问)
+   - Claude
+   - Google Gemini
+   - Local LLM (ollama)
 
 ### Plugin Installation
 
@@ -85,6 +90,7 @@ An all-in-one Obsidian plugin that converts handwritten PDFs to Markdown in a si
 | Google Gemini | `GEMINI_API_KEY` | `AIzaSyxxx...` |
 | Anthropic Claude | `ANTHROPIC_API_KEY` | `sk-ant-xxx...` |
 
+
 **Mac/Linux:**
 ```bash
 # Edit ~/.bashrc or ~/.zshrc (Mac users use ~/.zprofile), add:
@@ -132,10 +138,11 @@ Right-click any image inside an open note → **"Convert Image to Markdown"**. T
 | Provider | Model | Input/Output | Quality | **Cost/Page** | Rating |
 |---|---|---|---|---|---|
 | **Gemini** 🏆 | gemini-2.5-flash | 638/552 | Excellent | **$0** (Free) | ⭐⭐⭐⭐⭐ |
-| **Qwen** | qwen-vl-max | 2824/589 | Excellent | **$0.00048** | ⭐⭐⭐⭐⭐ |
+| **Qwen** | qwen-vl-plus | 2824/589 | Excellent | **$0.00048** | ⭐⭐⭐⭐⭐ |
 | **Claude** | claude-haiku-4-5-20251001 | 3156/629 | Excellent | **$0.00315** | ⭐⭐⭐⭐ |
 | **OpenAI** | gpt-5.4-mini | 5550/566 | Excellent | **$0.00335** | ⭐⭐⭐⭐ |
 | **iFlytek** | Spark | - | Poor | **$0** (Free) | ⭐ |
+| **Qwen Local** | qwen2.5vl:3b | | 0 | ⭐⭐⭐⭐ |
 
 #### 💡 Recommendation Guide
 

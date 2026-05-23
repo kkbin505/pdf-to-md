@@ -14,10 +14,15 @@
 
 **核心功能：**
 - 📄 右键 PDF → "Convert to Markdown"
-- 🤖 支持 GPT-4o, GPT-5.4, 阿里千问 (Qwen) 以及谷歌 Gemini
 - 📊 实时进度提示，显示转换状态和耗时
 - 🔐 API Key 安全管理（只读环境变量检测）
 - ⚙️ 可配置 DPI、超时、重试、文件冲突处理
+- 🤖 支持模型：
+  -  GPT
+  -  阿里千问 (Qwen)
+  -  Gemini
+  -  Claude
+  -  本地LLM (ollama托管)
 
 ### 插件安装
 
@@ -47,20 +52,19 @@
 - **阿里千问（推荐）：** https://dashscope.console.aliyun.com/apiKey
 - **OpenAI：** https://platform.openai.com/api-keys
 - **谷歌 Gemini：** https://aistudio.google.com/
+- **Anthropic Claude:** https://platform.claude.com/settings/workspaces/default/keys
+- 本地模型无需API Key
 
 **设置环境变量：**
 
 **Windows (PowerShell - 以管理员身份运行)：**
-```powershell
-# 阿里千问
-[System.Environment]::SetEnvironmentVariable('DASHSCOPE_API_KEY', 'sk-xxx...', 'User')
+| Provider | Env Variable | Example |
+|---|---|---|
+| Alibaba Qwen | `DASHSCOPE_API_KEY` | `sk-xxx...` |
+| OpenAI | `OPENAI_API_KEY` | `sk-proj-xxx...` |
+| Google Gemini | `GEMINI_API_KEY` | `AIzaSyxxx...` |
+| Anthropic Claude | `ANTHROPIC_API_KEY` | `sk-ant-xxx...` |
 
-# OpenAI
-[System.Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-proj-xxx...', 'User')
-
-# 谷歌 Gemini
-[System.Environment]::SetEnvironmentVariable('GEMINI_API_KEY', 'AIzaSyxxx...', 'User')
-```
 
 **Mac/Linux：**
 ```bash
@@ -68,6 +72,7 @@
 export DASHSCOPE_API_KEY='sk-xxx...'
 export OPENAI_API_KEY='sk-proj-xxx...'
 export GEMINI_API_KEY='AIzaSyxxx...'
+export ANTHROPIC_API_KEY='sk-ant-xxx...'
 
 # 保存后，重新加载配置：
 source ~/.bashrc  # 或 source ~/.zshrc

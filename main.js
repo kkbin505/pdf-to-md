@@ -27532,7 +27532,8 @@ var MODEL_OPTIONS = [
   { id: "qwen-vl-max-latest", name: "Alibaba Qwen VL Max Latest (\u5343\u95EE)", provider: "qwen", apiModel: "qwen-vl-max-latest" },
   { id: "claude-opus-4-7", name: "Anthropic Claude Opus 4", provider: "claude", apiModel: "claude-opus-4-7" },
   { id: "claude-sonnet-4-6", name: "Anthropic Claude Sonnet 4", provider: "claude", apiModel: "claude-sonnet-4-6" },
-  { id: "claude-haiku-4-5", name: "Anthropic Claude Haiku 4.5", provider: "claude", apiModel: "claude-haiku-4-5-20251001" }
+  { id: "claude-haiku-4-5", name: "Anthropic Claude Haiku 4.5", provider: "claude", apiModel: "claude-haiku-4-5-20251001" },
+  { id: "ollama-local", name: "Ollama (Local)", provider: "ollama", apiModel: "ollama" }
 ];
 var DEFAULT_SETTINGS = {
   provider: "qwen",
@@ -27541,6 +27542,8 @@ var DEFAULT_SETTINGS = {
   qwenModel: "qwen-vl-max",
   customBaseUrl: "",
   customModelName: "",
+  ollamaBaseUrl: "http://localhost:11434/v1",
+  ollamaModel: "gemma3:4b",
   dpi: 200,
   timeout: 60,
   maxRetries: 3,
@@ -27554,15 +27557,17 @@ var PDFToMDSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    const securityNotice = containerEl.createDiv("pdf-to-md-security-notice");
-    securityNotice.innerHTML = `
-      <div style="margin-bottom: 20px; padding: 12px; background: #f0f7ff; border-left: 4px solid #2196f3; border-radius: 4px;">
-        <strong>\u{1F512} Security:</strong> API keys are read from environment variables only.
-        <strong>No API keys are stored on disk.</strong>
-        <br/>
-        <small>See <a href="https://github.com/kkbin505/pdf-to-md">documentation</a> for setup instructions.</small>
-      </div>
-    `;
+    if (this.plugin.settings.provider !== "ollama") {
+      const securityNotice = containerEl.createDiv("pdf-to-md-security-notice");
+      securityNotice.innerHTML = `
+        <div style="margin-bottom: 20px; padding: 12px; background: #f0f7ff; border-left: 4px solid #2196f3; border-radius: 4px;">
+          <strong>\u{1F512} Security:</strong> API keys are read from environment variables only.
+          <strong>No API keys are stored on disk.</strong>
+          <br/>
+          <small>See <a href="https://github.com/kkbin505/pdf-to-md">documentation</a> for setup instructions.</small>
+        </div>
+      `;
+    }
     new import_obsidian.Setting(containerEl).setName("Model").setDesc("Select the AI model to use for recognition").addDropdown((dropdown) => {
       MODEL_OPTIONS.forEach((option) => {
         dropdown.addOption(option.id, option.name);
@@ -27620,7 +27625,22 @@ var PDFToMDSettingTab = class extends import_obsidian.PluginSettingTab {
       case "claude":
         this.addProviderSetting("Anthropic API Key Status", "Get from https://console.anthropic.com/settings/keys", "ANTHROPIC_API_KEY");
         break;
+      case "ollama":
+        this.addOllamaSettings();
+        break;
     }
+  }
+  addOllamaSettings() {
+    const { containerEl } = this;
+    new import_obsidian.Setting(containerEl).setName("Ollama Base URL").setDesc("URL of your local Ollama instance (default: http://localhost:11434/v1)").addText((text) => text.setPlaceholder("http://localhost:11434/v1").setValue(this.plugin.settings.ollamaBaseUrl).onChange(async (value) => {
+      this.plugin.settings.ollamaBaseUrl = value.trim() || "http://localhost:11434/v1";
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian.Setting(containerEl).setName("Ollama Model").setDesc("Name of the vision model to use (must support image input, e.g. gemma3:4b, llava, llama3.2-vision)").addText((text) => text.setPlaceholder("gemma3:4b").setValue(this.plugin.settings.ollamaModel).onChange(async (value) => {
+      this.plugin.settings.ollamaModel = value.trim() || "gemma3:4b";
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian.Setting(containerEl).setName("Ollama Status").setDesc("No API key required \u2014 Ollama runs locally").addText((text) => text.setValue("\u2713 Local \u2014 no key needed").setDisabled(true));
   }
   addProviderSetting(keyLabel, keyDesc, envVarName) {
     const { containerEl } = this;
@@ -27948,8 +27968,8 @@ var PDFToMDPlugin = class extends import_obsidian4.Plugin {
         new import_obsidian4.Notice("\u274C Unsupported file type. Only PDF, PNG, JPG, JPEG, and WebP are supported.", 5e3);
         return;
       }
-      const apiKey = this.getApiKey(this.settings.provider);
-      if (!apiKey) {
+      const apiKey = this.settings.provider === "ollama" ? "" : this.getApiKey(this.settings.provider) ?? "";
+      if (!apiKey && this.settings.provider !== "ollama") {
         const envVarMap = {
           openai: "OPENAI_API_KEY",
           qwen: "DASHSCOPE_API_KEY",
@@ -28049,6 +28069,9 @@ Then restart Obsidian.`, 1e4);
     if (selectedModel.provider === "qwen") {
       return "qwen";
     }
+    if (selectedModel.provider === "ollama") {
+      return settings.ollamaModel.replace(":", "-");
+    }
     return selectedModel.id;
   }
   createProgressBar(percent) {
@@ -28079,6 +28102,11 @@ Then restart Obsidian.`, 1e4);
         }, "https://generativelanguage.googleapis.com/v1beta/openai/");
       case "claude":
         return new AnthropicProvider({ apiKey, model: modelName });
+      case "ollama":
+        return new OpenAICompatibleProvider({
+          apiKey: "",
+          model: settings.ollamaModel || "gemma3:4b"
+        }, settings.ollamaBaseUrl || "http://localhost:11434/v1");
       default:
         throw new Error(`Unknown provider: ${settings.provider}`);
     }
@@ -28107,8 +28135,8 @@ Then restart Obsidian.`, 1e4);
         new import_obsidian4.Notice("\u274C No active editor found");
         return;
       }
-      const apiKey = this.getApiKey(this.settings.provider);
-      if (!apiKey) {
+      const apiKey = this.settings.provider === "ollama" ? "" : this.getApiKey(this.settings.provider) ?? "";
+      if (!apiKey && this.settings.provider !== "ollama") {
         new import_obsidian4.Notice("\u274C API Key not configured");
         return;
       }
@@ -28162,8 +28190,8 @@ Then restart Obsidian.`, 1e4);
         return;
       }
       const imageData = await this.app.vault.readBinary(imageFile);
-      const apiKey = this.getApiKey(this.settings.provider);
-      if (!apiKey) {
+      const apiKey = this.settings.provider === "ollama" ? "" : this.getApiKey(this.settings.provider) ?? "";
+      if (!apiKey && this.settings.provider !== "ollama") {
         new import_obsidian4.Notice("\u274C API Key not configured");
         return;
       }
