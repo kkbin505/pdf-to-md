@@ -8,6 +8,26 @@ This tool converts handwritten notes to Markdown using AI, designed as a seamles
 **[中文文档](README_zh.md)** | **English**
 ---
 
+## 🆓 Free Local Option: GLM-OCR (No API Key Required)
+
+If you want free, offline PDF/image recognition without any API key, GLM-OCR is the best option I've tested:
+
+- **Speed**: ~6 seconds per page
+- **VRAM**: ~4.8 GB (fits on an RTX 2060 or equivalent)
+- **Cost**: completely free, runs locally via [Ollama](https://ollama.com)
+
+**Setup:**
+```bash
+ollama pull glm-ocr:bf16
+```
+
+Then in plugin settings:
+- Model → **Ollama (Local)**
+- Ollama Model → `glm-ocr:bf16`
+
+
+---
+
 ## 📖 A little history
 
 While studying control theory, I fell in love with the handwriting experience of the **iFlytek Smart Notebook**. However, organizing notes in **Obsidian** proved frustrating: the native OCR was terrible at recognizing mathematical formulas.
@@ -137,18 +157,19 @@ Right-click any image inside an open note → **"Convert Image to Markdown"**. T
 
 | Provider | Model | Input/Output | Quality | **Cost/Page** | Rating |
 |---|---|---|---|---|---|
-| **Gemini** 🏆 | gemini-2.5-flash | 638/552 | Excellent | **$0** (Free) | ⭐⭐⭐⭐⭐ |
-| **Qwen** | qwen-vl-plus | 2824/589 | Excellent | **$0.00048** | ⭐⭐⭐⭐⭐ |
+| **Local** | glm-ocr:bf16 | | 0 | ⭐⭐⭐⭐⭐ |
+| **Gemini** 🏆 | gemini-2.5-flash | 638/552 | Excellent | **$0** (Free) | ⭐⭐⭐⭐ |
+| **Qwen** | qwen-vl-plus | 2824/589 | Excellent | **$0.00048** | ⭐⭐⭐⭐ |
 | **Claude** | claude-haiku-4-5-20251001 | 3156/629 | Excellent | **$0.00315** | ⭐⭐⭐⭐ |
 | **OpenAI** | gpt-5.4-mini | 5550/566 | Excellent | **$0.00335** | ⭐⭐⭐⭐ |
 | **iFlytek** | Spark | - | Poor | **$0** (Free) | ⭐ |
-| **Qwen Local** | qwen2.5vl:3b | | 0 | ⭐⭐⭐⭐ |
+
 
 #### 💡 Recommendation Guide
 
 | Priority | Recommended | Cost/Page | Reason |
 |---|---|---|---|
-| **1️⃣ First Choice** | Gemini | $0 | free, excellent recognition, just manage quota |
+| **1️⃣ First Choice** | glm-ocr:bf16 | $0 | free, excellent recognitio, Local, fast |
 | **2️⃣ China Users** | Qwen | $0.00048 | Cheapest paid option, stable quality, fast |
 | **3️⃣ Cost Conscious** | OpenAI | $0.00335 | Most tokens but lowest unit price, competitive cost |
 | **❌ Not Recommended** | iFlytek | $0 | Free but poor formula recognition, text-only |
@@ -160,7 +181,7 @@ Right-click any image inside an open note → **"Convert Image to Markdown"**. T
 |---|---|---|
 | **Model** | Qwen VL Max | Select the AI model from the unified list |
 | **API Key Status** | Auto-detect | Shows environment variable status (read-only) |
-| **PDF Rendering DPI** | 200 | Higher DPI = better quality but slower (100-400) |
+| **PDF Rendering DPI** | 150 | Higher DPI = better quality but slower (100-400) |
 | **API Timeout** | 60s | Maximum wait time for API response |
 | **Max Retries** | 3 | Number of retry attempts on failure |
 | **File Conflict Handling** | Model-based naming | How to handle existing output files |
