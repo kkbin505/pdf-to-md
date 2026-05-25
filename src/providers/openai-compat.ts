@@ -22,7 +22,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
             {
               type: 'image_url',
               image_url: {
-                url: `data:image/png;base64,${imageBase64}`,
+                url: `data:${this.getMediaType(imageBase64)};base64,${imageBase64}`,
               },
             },
             {
@@ -58,11 +58,19 @@ export class OpenAICompatibleProvider implements ModelProvider {
     return response.json.choices[0].message.content;
   }
 
+  private getMediaType(imageBase64: string): string {
+    if (imageBase64.startsWith('/9j/')) return 'image/jpeg';
+    if (imageBase64.startsWith('iVBORw0KGgo')) return 'image/png';
+    if (imageBase64.startsWith('UklGR')) return 'image/webp';
+    return 'image/jpeg';
+  }
+
   private getPrompt(): string {
-    return `Transcribe this handwritten content into Markdown format:
-1. Preserve all text and numbers exactly
-2. Use LaTeX for math: inline with $...$, block with $$...$$
-3. Keep document structure (headings, paragraphs, lists)
-4. Output only the Markdown, no extra commentary`;
+    return `Transcribe the content in this image into Markdown format:
+1. Preserve all text and numbers exactly as they appear
+2. Use LaTeX for math expressions: inline with $...$, block with $$...$$
+3. If the image contains tables, transcribe them into standard Markdown table format. Maintain the original row and column structure; leave blank cells empty.
+4. Output only the Markdown, no extra commentary
+5. Do NOT wrap the final response in any markdown code fences or code blocks`;
   }
 }

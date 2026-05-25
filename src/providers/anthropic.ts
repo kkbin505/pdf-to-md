@@ -64,10 +64,11 @@ export class AnthropicProvider implements ModelProvider {
   }
 
   private getPrompt(): string {
-    return `Transcribe this handwritten content into Markdown format:
-1. Preserve all text and numbers exactly
-2. Use LaTeX for math: inline with $...$, block with $$...$$
-3. Keep document structure (headings, paragraphs, lists)
-4. Output only the Markdown, no extra commentary`;
+    return `Transcribe the content in this image into Markdown format:
+1. Preserve all text and numbers exactly as they appear
+2. Use LaTeX for math expressions: inline with $...$, block with $$...$$
+3. If the image contains tables, transcribe them into standard Markdown table format. Maintain the original row and column structure; leave blank cells empty.
+4. Output only the Markdown, no extra commentary
+5. Do NOT wrap the final response in any markdown code fences or code blocks`;
   }
 }

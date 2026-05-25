@@ -27521,7 +27521,6 @@ var MODEL_OPTIONS = [
   { id: "openai-gpt-4o-mini", name: "OpenAI GPT-4o Mini", provider: "openai", apiModel: "gpt-4o-mini" },
   { id: "openai-gpt-4.1", name: "OpenAI GPT-4.1", provider: "openai", apiModel: "gpt-4.1" },
   { id: "openai-gpt-4.1-mini", name: "OpenAI GPT-4.1 Mini", provider: "openai", apiModel: "gpt-4.1-mini" },
-  { id: "openai-gpt-4.1-nano", name: "OpenAI GPT-4.1 Nano", provider: "openai", apiModel: "gpt-4.1-nano" },
   { id: "openai-gpt-5.4-mini", name: "OpenAI GPT-5.4 Mini", provider: "openai", apiModel: "gpt-5.4-mini" },
   { id: "openai-gpt-5.4", name: "OpenAI GPT-5.4", provider: "openai", apiModel: "gpt-5.4" },
   { id: "gemini-2.5-flash", name: "Google Gemini 2.5 Flash", provider: "gemini", apiModel: "gemini-2.5-flash" },
@@ -27543,8 +27542,8 @@ var DEFAULT_SETTINGS = {
   customBaseUrl: "",
   customModelName: "",
   ollamaBaseUrl: "http://localhost:11434/v1",
-  ollamaModel: "gemma3:4b",
-  dpi: 200,
+  ollamaModel: "glm-ocr:bf16",
+  dpi: 150,
   timeout: 60,
   maxRetries: 3,
   conflictResolution: "by-model"
@@ -27586,10 +27585,17 @@ var PDFToMDSettingTab = class extends import_obsidian.PluginSettingTab {
       });
     });
     this.displayProviderSettings();
-    new import_obsidian.Setting(containerEl).setName("PDF Rendering DPI").setDesc("Higher DPI = better quality but slower (default: 200)").addSlider((slider) => slider.setLimits(100, 400, 50).setValue(this.plugin.settings.dpi).onChange(async (value) => {
-      this.plugin.settings.dpi = value;
-      await this.plugin.saveSettings();
-    })).addExtraButton((button) => button.setIcon("reset").onClick(async () => {
+    new import_obsidian.Setting(containerEl).setName("PDF Rendering DPI").setDesc("Higher DPI = better quality but slower").addSlider((slider) => {
+      const label = document.createElement("span");
+      label.textContent = `${this.plugin.settings.dpi}`;
+      label.style.cssText = "min-width:36px;text-align:right;font-variant-numeric:tabular-nums";
+      slider.sliderEl.insertAdjacentElement("afterend", label);
+      slider.setLimits(50, 300, 50).setValue(this.plugin.settings.dpi).onChange(async (value) => {
+        this.plugin.settings.dpi = value;
+        label.textContent = `${value}`;
+        await this.plugin.saveSettings();
+      });
+    }).addExtraButton((button) => button.setIcon("reset").onClick(async () => {
       this.plugin.settings.dpi = 200;
       await this.plugin.saveSettings();
       this.display();
@@ -27682,12 +27688,14 @@ async function pdfToImages(pdfData, dpi = 200) {
     if (!context) {
       throw new Error(`Failed to get canvas context for page ${i}`);
     }
+    context.fillStyle = "white";
+    context.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({
       canvas,
       canvasContext: context,
       viewport
     }).promise;
-    const base64 = canvas.toDataURL("image/png").split(",")[1];
+    const base64 = canvas.toDataURL("image/jpeg", 0.92).split(",")[1];
     images.push(base64);
   }
   return images;
@@ -27791,7 +27799,7 @@ var OpenAICompatibleProvider = class {
             {
               type: "image_url",
               image_url: {
-                url: `data:image/png;base64,${imageBase64}`
+                url: `data:${this.getMediaType(imageBase64)};base64,${imageBase64}`
               }
             },
             {
@@ -27822,12 +27830,22 @@ var OpenAICompatibleProvider = class {
     }
     return response.json.choices[0].message.content;
   }
+  getMediaType(imageBase64) {
+    if (imageBase64.startsWith("/9j/"))
+      return "image/jpeg";
+    if (imageBase64.startsWith("iVBORw0KGgo"))
+      return "image/png";
+    if (imageBase64.startsWith("UklGR"))
+      return "image/webp";
+    return "image/jpeg";
+  }
   getPrompt() {
-    return `Transcribe this handwritten content into Markdown format:
-1. Preserve all text and numbers exactly
-2. Use LaTeX for math: inline with $...$, block with $$...$$
-3. Keep document structure (headings, paragraphs, lists)
-4. Output only the Markdown, no extra commentary`;
+    return `Transcribe the content in this image into Markdown format:
+1. Preserve all text and numbers exactly as they appear
+2. Use LaTeX for math expressions: inline with $...$, block with $$...$$
+3. If the image contains tables, transcribe them into standard Markdown table format. Maintain the original row and column structure; leave blank cells empty.
+4. Output only the Markdown, no extra commentary
+5. Do NOT wrap the final response in any markdown code fences or code blocks`;
   }
 };
 
@@ -27891,11 +27909,12 @@ var AnthropicProvider = class {
     return response.json.content[0].text;
   }
   getPrompt() {
-    return `Transcribe this handwritten content into Markdown format:
-1. Preserve all text and numbers exactly
-2. Use LaTeX for math: inline with $...$, block with $$...$$
-3. Keep document structure (headings, paragraphs, lists)
-4. Output only the Markdown, no extra commentary`;
+    return `Transcribe the content in this image into Markdown format:
+1. Preserve all text and numbers exactly as they appear
+2. Use LaTeX for math expressions: inline with $...$, block with $$...$$
+3. If the image contains tables, transcribe them into standard Markdown table format. Maintain the original row and column structure; leave blank cells empty.
+4. Output only the Markdown, no extra commentary
+5. Do NOT wrap the final response in any markdown code fences or code blocks`;
   }
 };
 

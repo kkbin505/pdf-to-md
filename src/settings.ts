@@ -13,7 +13,6 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: 'openai-gpt-4o-mini', name: 'OpenAI GPT-4o Mini', provider: 'openai', apiModel: 'gpt-4o-mini' },
   { id: 'openai-gpt-4.1', name: 'OpenAI GPT-4.1', provider: 'openai', apiModel: 'gpt-4.1' },
   { id: 'openai-gpt-4.1-mini', name: 'OpenAI GPT-4.1 Mini', provider: 'openai', apiModel: 'gpt-4.1-mini' },
-  { id: 'openai-gpt-4.1-nano', name: 'OpenAI GPT-4.1 Nano', provider: 'openai', apiModel: 'gpt-4.1-nano' },
   { id: 'openai-gpt-5.4-mini', name: 'OpenAI GPT-5.4 Mini', provider: 'openai', apiModel: 'gpt-5.4-mini' },
   { id: 'openai-gpt-5.4', name: 'OpenAI GPT-5.4', provider: 'openai', apiModel: 'gpt-5.4' },
   { id: 'gemini-2.5-flash', name: 'Google Gemini 2.5 Flash', provider: 'gemini', apiModel: 'gemini-2.5-flash' },
@@ -51,8 +50,8 @@ export const DEFAULT_SETTINGS: PDFToMDSettings = {
   customBaseUrl: '',
   customModelName: '',
   ollamaBaseUrl: 'http://localhost:11434/v1',
-  ollamaModel: 'gemma3:4b',
-  dpi: 200,
+  ollamaModel: 'glm-ocr:bf16',
+  dpi: 150,
   timeout: 60,
   maxRetries: 3,
   conflictResolution: 'by-model',
@@ -116,16 +115,22 @@ export class PDFToMDSettingTab extends PluginSettingTab {
     // DPI setting
     new Setting(containerEl)
       .setName('PDF Rendering DPI')
-      .setDesc('Higher DPI = better quality but slower (default: 200)')
-      .addSlider(slider =>
+      .setDesc('Higher DPI = better quality but slower')
+      .addSlider(slider => {
+        const label = document.createElement('span');
+        label.textContent = `${this.plugin.settings.dpi}`;
+        label.style.cssText = 'min-width:36px;text-align:right;font-variant-numeric:tabular-nums';
+        slider.sliderEl.insertAdjacentElement('afterend', label);
+
         slider
-          .setLimits(100, 400, 50)
+          .setLimits(50, 300, 50)
           .setValue(this.plugin.settings.dpi)
           .onChange(async value => {
             this.plugin.settings.dpi = value;
+            label.textContent = `${value}`;
             await this.plugin.saveSettings();
-          })
-      )
+          });
+      })
       .addExtraButton(button =>
         button.setIcon('reset').onClick(async () => {
           this.plugin.settings.dpi = 200;

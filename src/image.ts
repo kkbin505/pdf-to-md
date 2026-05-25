@@ -18,13 +18,16 @@ export async function pdfToImages(pdfData: ArrayBuffer, dpi: number = 200): Prom
       throw new Error(`Failed to get canvas context for page ${i}`);
     }
 
+    context.fillStyle = 'white';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
     await page.render({
       canvas: canvas,
       canvasContext: context,
       viewport: viewport,
     }).promise;
 
-    const base64 = canvas.toDataURL('image/png').split(',')[1];
+    const base64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
     images.push(base64);
   }
 
