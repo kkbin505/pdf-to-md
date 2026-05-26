@@ -15,6 +15,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: 'openai-gpt-4.1-mini', name: 'OpenAI GPT-4.1 Mini', provider: 'openai', apiModel: 'gpt-4.1-mini' },
   { id: 'openai-gpt-5.4-mini', name: 'OpenAI GPT-5.4 Mini', provider: 'openai', apiModel: 'gpt-5.4-mini' },
   { id: 'openai-gpt-5.4', name: 'OpenAI GPT-5.4', provider: 'openai', apiModel: 'gpt-5.4' },
+  { id: 'gemini-3.5-flash', name: 'Google Gemini 3.5 Flash', provider: 'gemini', apiModel: 'gemini-3.5-flash' },
   { id: 'gemini-2.5-flash', name: 'Google Gemini 2.5 Flash', provider: 'gemini', apiModel: 'gemini-2.5-flash' },
   { id: 'gemini-2.5-flash-lite', name: 'Google Gemini 2.5 Flash-Lite Preview 06-17', provider: 'gemini', apiModel: 'gemini-2.5-flash-lite-preview-06-17' },
   { id: 'gemini-2.5-pro', name: 'Google Gemini 2.5 Pro', provider: 'gemini', apiModel: 'gemini-2.5-pro' },
