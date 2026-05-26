@@ -1,4 +1,4 @@
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 export async function pdfToImages(pdfData: ArrayBuffer, dpi: number = 200): Promise<string[]> {
   const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;

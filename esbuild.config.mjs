@@ -13,6 +13,12 @@ if (!Map.prototype.getOrInsertComputed) {
     return this.get(key);
   };
 }
+// Polyfill for Uint8Array.prototype.toHex (Chromium 140+, not yet in Obsidian's Electron)
+if (!Uint8Array.prototype.toHex) {
+  Uint8Array.prototype.toHex = function() {
+    return Array.from(this, byte => byte.toString(16).padStart(2, '0')).join('');
+  };
+}
 `;
 
 const prod = (process.argv[2] === 'production');

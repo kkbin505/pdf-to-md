@@ -1,5 +1,5 @@
 import { Plugin, Notice, TFile, Menu } from 'obsidian';
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { PDFToMDSettings, PDFToMDSettingTab, DEFAULT_SETTINGS, MODEL_OPTIONS } from './src/settings';
 import { PDFConverter } from './src/converter';
 import { ModelProvider } from './src/providers/base';
@@ -12,7 +12,7 @@ export default class PDFToMDPlugin extends Plugin {
 
   private setupPdfWorker() {
     pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://unpkg.com/pdfjs-dist@5.7.284/build/pdf.worker.min.mjs';
+      'https://unpkg.com/pdfjs-dist@5.7.284/legacy/build/pdf.worker.min.mjs';
   }
 
   async onload() {
