@@ -27,7 +27,7 @@ export async function pdfToImages(pdfData: ArrayBuffer, dpi: number = 200): Prom
       viewport: viewport,
     }).promise;
 
-    const base64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
+    const base64 = canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
     images.push(base64);
   }
 

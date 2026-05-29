@@ -39,7 +39,6 @@ export interface PDFToMDSettings {
   ollamaModel: string;
   dpi: number;
   timeout: number;
-  maxRetries: number;
   conflictResolution: 'overwrite' | 'skip' | 'timestamp' | 'by-model';
 }
 
@@ -54,7 +53,6 @@ export const DEFAULT_SETTINGS: PDFToMDSettings = {
   ollamaModel: 'glm-ocr:bf16',
   dpi: 150,
   timeout: 60,
-  maxRetries: 3,
   conflictResolution: 'by-model',
 };
 
@@ -157,19 +155,6 @@ export class PDFToMDSettingTab extends PluginSettingTab {
           })
       );
 
-    // Retry setting
-    new Setting(containerEl)
-      .setName('Max Retries')
-      .setDesc('Number of times to retry on failure')
-      .addSlider(slider =>
-        slider
-          .setLimits(1, 5, 1)
-          .setValue(this.plugin.settings.maxRetries)
-          .onChange(async value => {
-            this.plugin.settings.maxRetries = value;
-            await this.plugin.saveSettings();
-          })
-      );
 
     // File conflict handling
     new Setting(containerEl)

@@ -32087,7 +32087,6 @@ var DEFAULT_SETTINGS = {
   ollamaModel: "glm-ocr:bf16",
   dpi: 150,
   timeout: 60,
-  maxRetries: 3,
   conflictResolution: "by-model"
 };
 var PDFToMDSettingTab = class extends import_obsidian.PluginSettingTab {
@@ -32148,10 +32147,6 @@ var PDFToMDSettingTab = class extends import_obsidian.PluginSettingTab {
         this.plugin.settings.timeout = num;
         await this.plugin.saveSettings();
       }
-    }));
-    new import_obsidian.Setting(containerEl).setName("Max Retries").setDesc("Number of times to retry on failure").addSlider((slider) => slider.setLimits(1, 5, 1).setValue(this.plugin.settings.maxRetries).onChange(async (value) => {
-      this.plugin.settings.maxRetries = value;
-      await this.plugin.saveSettings();
     }));
     new import_obsidian.Setting(containerEl).setName("File Conflict Resolution").setDesc("What to do if output file already exists").addDropdown((dropdown) => dropdown.addOption("overwrite", "Overwrite existing file").addOption("skip", "Skip (do not generate)").addOption("timestamp", "Add timestamp (e.g., file_20250515_110430.md)").addOption("by-model", "Add model name (e.g., file_qwen.md) - Recommended").setValue(this.plugin.settings.conflictResolution).onChange(async (value) => {
       this.plugin.settings.conflictResolution = value;
@@ -32237,7 +32232,7 @@ async function pdfToImages(pdfData, dpi = 200) {
       canvasContext: context,
       viewport
     }).promise;
-    const base64 = canvas.toDataURL("image/jpeg", 0.92).split(",")[1];
+    const base64 = canvas.toDataURL("image/jpeg", 0.82).split(",")[1];
     images.push(base64);
   }
   return images;
@@ -32299,7 +32294,7 @@ var PDFConverter = class {
   async convertImageBuffer(imageData) {
     try {
       this.emitProgress(0, 1, "Converting image...");
-      const imageBase64 = this.arrayBufferToBase64(imageData);
+      const imageBase64 = await this.compressImageBuffer(imageData);
       const result = await this.recognizeWithRetry(imageBase64, 1);
       this.emitProgress(1, 1, "Done");
       return result;
@@ -32307,13 +32302,45 @@ var PDFConverter = class {
       throw new Error(`Image conversion failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  arrayBufferToBase64(buffer) {
-    const bytes = new Uint8Array(buffer);
-    let binary = "";
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
+  detectMimeType(buffer) {
+    const bytes = new Uint8Array(buffer, 0, 4);
+    if (bytes[0] === 255 && bytes[1] === 216)
+      return "image/jpeg";
+    if (bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71)
+      return "image/png";
+    if (bytes[0] === 82 && bytes[1] === 73 && bytes[2] === 70 && bytes[3] === 70)
+      return "image/webp";
+    if (bytes[0] === 71 && bytes[1] === 73 && bytes[2] === 70)
+      return "image/gif";
+    return "image/jpeg";
+  }
+  async compressImageBuffer(buffer) {
+    const blob = new Blob([buffer], { type: this.detectMimeType(buffer) });
+    const url = URL.createObjectURL(blob);
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = reject;
+        image.src = url;
+      });
+      const MAX_WIDTH = 2048;
+      let { width, height } = img;
+      if (width > MAX_WIDTH) {
+        height = Math.round(height * MAX_WIDTH / width);
+        width = MAX_WIDTH;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      return canvas.toDataURL("image/jpeg", 0.82).split(",")[1];
+    } finally {
+      URL.revokeObjectURL(url);
     }
-    return btoa(binary);
   }
   withTimeout(promise, ms) {
     return Promise.race([
@@ -32351,7 +32378,8 @@ var OpenAICompatibleProvider = class {
           ]
         }
       ],
-      max_completion_tokens: 2e3
+      max_completion_tokens: 2e3,
+      stream: false
     };
     const headers = {
       "Content-Type": "application/json"
@@ -32367,10 +32395,15 @@ var OpenAICompatibleProvider = class {
       throw: false
     });
     if (response.status >= 400) {
-      const msg = response.json?.error?.message ?? response.text;
-      throw new Error(`API Error ${response.status}: ${msg}`);
+      throw new Error(`API Error ${response.status}: ${response.text.substring(0, 300)}`);
     }
-    return response.json.choices[0].message.content;
+    let parsed;
+    try {
+      parsed = response.json;
+    } catch (e) {
+      throw new Error(`JSON parse failed. Raw response (first 500 chars): ${response.text.substring(0, 500)}`);
+    }
+    return parsed.choices[0].message.content;
   }
   getMediaType(imageBase64) {
     if (imageBase64.startsWith("/9j/"))
@@ -32522,6 +32555,7 @@ var PDFToMDPlugin = class extends import_obsidian4.Plugin {
     return this.apiKeys.get(provider) || null;
   }
   async convertFile(file) {
+    let notice = null;
     try {
       const isPdf = file.extension === "pdf";
       const isImage = ["png", "jpg", "jpeg", "webp"].includes(file.extension.toLowerCase());
@@ -32553,12 +32587,12 @@ Then restart Obsidian.`, 1e4);
         console.error(`API Key missing. Environment variable: ${envVar}`);
         return;
       }
-      const notice = new import_obsidian4.Notice(`Starting ${isPdf ? "PDF" : "Image"} conversion...`, 0);
+      notice = new import_obsidian4.Notice(`Starting ${isPdf ? "PDF" : "Image"} conversion...`, 0);
       const data = await this.app.vault.readBinary(file);
       const provider = this.createProvider(apiKey);
       const converter = new PDFConverter(provider, {
         timeout: this.settings.timeout * 1e3,
-        maxRetries: this.settings.maxRetries
+        maxRetries: 3
       });
       let startTime = Date.now();
       converter.setProgressCallback((progress) => {
@@ -32578,6 +32612,7 @@ Then restart Obsidian.`, 1e4);
       const outputPath = this.getOutputPath(file);
       const existingFile = this.app.vault.getAbstractFileByPath(outputPath);
       if (existingFile && this.settings.conflictResolution === "skip") {
+        notice.hide();
         new import_obsidian4.Notice(`File already exists: ${outputPath}. Skipped.`, 5e3);
         return;
       }
@@ -32589,6 +32624,7 @@ Then restart Obsidian.`, 1e4);
       notice.setMessage(`\u2713 Converted to ${outputPath}`);
       setTimeout(() => notice.hide(), 3e3);
     } catch (error) {
+      notice?.hide();
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes("Unauthorized") || message.includes("API key")) {
         new import_obsidian4.Notice(`\u274C API Error: Invalid or expired API key. Please check your environment variables.`, 1e4);
@@ -32706,7 +32742,7 @@ Then restart Obsidian.`, 1e4);
       const provider = this.createProvider(apiKey);
       const converter = new PDFConverter(provider, {
         timeout: this.settings.timeout * 1e3,
-        maxRetries: this.settings.maxRetries
+        maxRetries: 3
       });
       const markdown = await converter.convertImageBuffer(imageData);
       const content = editor.getValue();
@@ -32760,7 +32796,7 @@ Then restart Obsidian.`, 1e4);
       const provider = this.createProvider(apiKey);
       const converter = new PDFConverter(provider, {
         timeout: this.settings.timeout * 1e3,
-        maxRetries: this.settings.maxRetries
+        maxRetries: 3
       });
       const markdown = await converter.convertImageBuffer(imageData);
       const content = editor.getValue();

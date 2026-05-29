@@ -33,6 +33,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
         },
       ],
       max_completion_tokens: 2000,
+      stream: false,
     };
 
     const headers: Record<string, string> = {
@@ -51,11 +52,17 @@ export class OpenAICompatibleProvider implements ModelProvider {
     });
 
     if (response.status >= 400) {
-      const msg = response.json?.error?.message ?? response.text;
-      throw new Error(`API Error ${response.status}: ${msg}`);
+      throw new Error(`API Error ${response.status}: ${response.text.substring(0, 300)}`);
     }
 
-    return response.json.choices[0].message.content;
+    let parsed: any;
+    try {
+      parsed = response.json;
+    } catch (e) {
+      throw new Error(`JSON parse failed. Raw response (first 500 chars): ${response.text.substring(0, 500)}`);
+    }
+
+    return parsed.choices[0].message.content;
   }
 
   private getMediaType(imageBase64: string): string {

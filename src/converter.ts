@@ -86,7 +86,7 @@ export class PDFConverter {
   async convertImageBuffer(imageData: ArrayBuffer): Promise<string> {
     try {
       this.emitProgress(0, 1, 'Converting image...');
-      const imageBase64 = this.arrayBufferToBase64(imageData);
+      const imageBase64 = await this.compressImageBuffer(imageData);
       const result = await this.recognizeWithRetry(imageBase64, 1);
       this.emitProgress(1, 1, 'Done');
       return result;
@@ -95,13 +95,45 @@ export class PDFConverter {
     }
   }
 
-  private arrayBufferToBase64(buffer: ArrayBuffer): string {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
+  private detectMimeType(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer, 0, 4);
+    if (bytes[0] === 0xFF && bytes[1] === 0xD8) return 'image/jpeg';
+    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return 'image/png';
+    if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) return 'image/webp';
+    if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return 'image/gif';
+    return 'image/jpeg';
+  }
+
+  private async compressImageBuffer(buffer: ArrayBuffer): Promise<string> {
+    const blob = new Blob([buffer], { type: this.detectMimeType(buffer) });
+    const url = URL.createObjectURL(blob);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = reject;
+        image.src = url;
+      });
+
+      const MAX_WIDTH = 2048;
+      let { width, height } = img;
+      if (width > MAX_WIDTH) {
+        height = Math.round((height * MAX_WIDTH) / width);
+        width = MAX_WIDTH;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+
+      return canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+    } finally {
+      URL.revokeObjectURL(url);
     }
-    return btoa(binary);
   }
 
   private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

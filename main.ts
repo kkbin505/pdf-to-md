@@ -97,6 +97,7 @@ export default class PDFToMDPlugin extends Plugin {
   }
 
   private async convertFile(file: TFile) {
+    let notice: Notice | null = null;
     try {
       const isPdf = file.extension === 'pdf';
       const isImage = ['png', 'jpg', 'jpeg', 'webp'].includes(file.extension.toLowerCase());
@@ -132,14 +133,14 @@ export default class PDFToMDPlugin extends Plugin {
         return;
       }
 
-      const notice = new Notice(`Starting ${isPdf ? 'PDF' : 'Image'} conversion...`, 0);
+      notice = new Notice(`Starting ${isPdf ? 'PDF' : 'Image'} conversion...`, 0);
 
       const data = await this.app.vault.readBinary(file);
 
       const provider = this.createProvider(apiKey);
       const converter = new PDFConverter(provider, {
         timeout: this.settings.timeout * 1000,
-        maxRetries: this.settings.maxRetries,
+        maxRetries: 3,
       });
 
       let startTime = Date.now();
@@ -167,6 +168,7 @@ export default class PDFToMDPlugin extends Plugin {
       const existingFile = this.app.vault.getAbstractFileByPath(outputPath);
 
       if (existingFile && this.settings.conflictResolution === 'skip') {
+        notice.hide();
         new Notice(`File already exists: ${outputPath}. Skipped.`, 5000);
         return;
       }
@@ -181,6 +183,7 @@ export default class PDFToMDPlugin extends Plugin {
       notice.setMessage(`✓ Converted to ${outputPath}`);
       setTimeout(() => notice.hide(), 3000);
     } catch (error) {
+      notice?.hide();
       const message = error instanceof Error ? error.message : String(error);
 
       // Provide helpful error messages
@@ -337,7 +340,7 @@ export default class PDFToMDPlugin extends Plugin {
       const provider = this.createProvider(apiKey);
       const converter = new PDFConverter(provider, {
         timeout: this.settings.timeout * 1000,
-        maxRetries: this.settings.maxRetries,
+        maxRetries: 3,
       });
 
       const markdown = await converter.convertImageBuffer(imageData);
@@ -413,7 +416,7 @@ export default class PDFToMDPlugin extends Plugin {
       const provider = this.createProvider(apiKey);
       const converter = new PDFConverter(provider, {
         timeout: this.settings.timeout * 1000,
-        maxRetries: this.settings.maxRetries,
+        maxRetries: 3,
       });
 
       const markdown = await converter.convertImageBuffer(imageData);
