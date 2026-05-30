@@ -1,12 +1,25 @@
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { getPlatformCompressionConfig } from './utils/image-compress';
 
 export async function pdfToImages(pdfData: ArrayBuffer, dpi: number = 200): Promise<string[]> {
   const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
   const images: string[] = [];
-  const scale = dpi / 72;
+  const platformConfig = getPlatformCompressionConfig();
+  const maxDimension = platformConfig.maxDimension;
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
+    const baseViewport = page.getViewport({ scale: 1.0 });
+    let scale = dpi / 72;
+
+    let width = baseViewport.width * scale;
+    let height = baseViewport.height * scale;
+
+    if (width > maxDimension || height > maxDimension) {
+      const downScale = maxDimension / Math.max(width, height);
+      scale = scale * downScale;
+    }
+
     const viewport = page.getViewport({ scale });
 
     const canvas = document.createElement('canvas');
@@ -27,7 +40,7 @@ export async function pdfToImages(pdfData: ArrayBuffer, dpi: number = 200): Prom
       viewport: viewport,
     }).promise;
 
-    const base64 = canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+    const base64 = canvas.toDataURL('image/jpeg', platformConfig.quality).split(',')[1];
     images.push(base64);
   }
 

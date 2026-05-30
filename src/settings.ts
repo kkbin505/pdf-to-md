@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
+import { App, PluginSettingTab, Setting, Notice, Platform } from 'obsidian';
 import PDFToMDPlugin from '../main';
 
 export interface ModelOption {
@@ -71,10 +71,12 @@ export class PDFToMDSettingTab extends PluginSettingTab {
     // 🔒 Security notice (hidden for Ollama — no key needed)
     if (this.plugin.settings.provider !== 'ollama') {
       const securityNotice = containerEl.createDiv('pdf-to-md-security-notice');
+      const noticeText = Platform.isIosApp
+        ? '<strong>🔒 Security:</strong> API keys are stored securely in <strong>iOS Keychain</strong> and are not synced.'
+        : '<strong>🔒 Security:</strong> API keys are read from environment variables only. <strong>No API keys are stored on disk.</strong>';
       securityNotice.innerHTML = `
         <div style="margin-bottom: 20px; padding: 12px; background: #f0f7ff; border-left: 4px solid #2196f3; border-radius: 4px;">
-          <strong>🔒 Security:</strong> API keys are read from environment variables only.
-          <strong>No API keys are stored on disk.</strong>
+          ${noticeText}
           <br/>
           <small>See <a href="https://github.com/kkbin505/pdf-to-md">documentation</a> for setup instructions.</small>
         </div>
@@ -180,6 +182,7 @@ export class PDFToMDSettingTab extends PluginSettingTab {
     switch (provider) {
       case 'openai':
         this.addProviderSetting(
+          'openai',
           'OpenAI API Key Status',
           'Get from https://platform.openai.com/api-keys',
           'OPENAI_API_KEY'
@@ -187,6 +190,7 @@ export class PDFToMDSettingTab extends PluginSettingTab {
         break;
       case 'qwen':
         this.addProviderSetting(
+          'qwen',
           'Alibaba DashScope API Key Status',
           'Get from https://dashscope.console.aliyun.com/apiKey',
           'DASHSCOPE_API_KEY'
@@ -194,6 +198,7 @@ export class PDFToMDSettingTab extends PluginSettingTab {
         break;
       case 'gemini':
         this.addProviderSetting(
+          'gemini',
           'Google Gemini API Key Status',
           'Get from Google AI Studio / Generative AI console',
           'GEMINI_API_KEY'
@@ -201,6 +206,7 @@ export class PDFToMDSettingTab extends PluginSettingTab {
         break;
       case 'claude':
         this.addProviderSetting(
+          'claude',
           'Anthropic API Key Status',
           'Get from https://console.anthropic.com/settings/keys',
           'ANTHROPIC_API_KEY'
@@ -250,11 +256,39 @@ export class PDFToMDSettingTab extends PluginSettingTab {
   }
 
   private addProviderSetting(
+    provider: string,
     keyLabel: string,
     keyDesc: string,
     envVarName: string
   ): void {
     const { containerEl } = this;
+
+    if (Platform.isIosApp) {
+      const secretStorage = (this.app as any).secretStorage;
+      if (secretStorage) {
+        const isConfigured = !!this.plugin.apiKeys.get(provider);
+        new Setting(containerEl)
+          .setName(keyLabel)
+          .setDesc(`${keyDesc}\n**Stored securely in iOS Keychain (not synced).**`)
+          .addText(text => {
+            text.inputEl.type = 'password';
+            text.setPlaceholder(isConfigured ? '••••••••••••••••' : 'Enter API key...')
+              .onChange(async value => {
+                const val = value.trim();
+                if (!val) return;
+                this.plugin.apiKeys.set(provider, val);
+                try {
+                  await secretStorage.setSecret(`pdf-to-md-${provider}-key`, val);
+                } catch (e) {
+                  console.error(`Failed to save secret for ${provider}:`, e);
+                  new Notice(`Failed to save API key to Keychain`, 5000);
+                }
+              });
+          });
+        return;
+      }
+    }
+
     const envValue = this.getEnvValue(envVarName);
 
     // Show API Key status (read-only)

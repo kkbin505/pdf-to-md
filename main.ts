@@ -1,4 +1,4 @@
-import { Plugin, Notice, TFile, Menu } from 'obsidian';
+import { Plugin, Notice, TFile, Menu, Platform } from 'obsidian';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { PDFToMDSettings, PDFToMDSettingTab, DEFAULT_SETTINGS, MODEL_OPTIONS } from './src/settings';
 import { PDFConverter } from './src/converter';
@@ -8,7 +8,7 @@ import { AnthropicProvider } from './src/providers/anthropic';
 
 export default class PDFToMDPlugin extends Plugin {
   settings: PDFToMDSettings;
-  private apiKeys: Map<string, string> = new Map();  // Store API keys in memory
+  apiKeys: Map<string, string> = new Map();  // Store API keys in memory
 
   private setupPdfWorker() {
     pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -21,8 +21,8 @@ export default class PDFToMDPlugin extends Plugin {
 
     await this.loadSettings();
 
-    // Load API keys from environment variables
-    this.loadApiKeysFromEnv();
+    // Load API keys
+    await this.loadApiKeys();
 
     this.addSettingTab(new PDFToMDSettingTab(this.app, this));
 
@@ -62,7 +62,26 @@ export default class PDFToMDPlugin extends Plugin {
     );
   }
 
-  private loadApiKeysFromEnv() {
+  private async loadApiKeys() {
+    if (Platform.isIosApp) {
+      const secretStorage = (this.app as any).secretStorage;
+      if (secretStorage) {
+        const providers = ['openai', 'qwen', 'gemini', 'claude'];
+        for (const provider of providers) {
+          try {
+            const key = await secretStorage.getSecret(`pdf-to-md-${provider}-key`);
+            if (key) {
+              this.apiKeys.set(provider, key);
+              console.log(`✓ Loaded secure key for ${provider}`);
+            }
+          } catch (e) {
+            console.error(`Failed to load secret key for ${provider}:`, e);
+          }
+        }
+        return;
+      }
+    }
+
     const envVars = {
       'openai': 'OPENAI_API_KEY',
       'qwen': 'DASHSCOPE_API_KEY',
