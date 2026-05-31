@@ -4,7 +4,7 @@ import PDFToMDPlugin from '../main';
 export interface ModelOption {
   id: string;
   name: string;
-  provider: 'openai' | 'qwen' | 'gemini' | 'claude' | 'ollama';
+  provider: 'openai' | 'qwen' | 'gemini' | 'claude' | 'local';
   apiModel: string;
 }
 
@@ -25,18 +25,18 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: 'claude-opus-4-7', name: 'Anthropic Claude Opus 4', provider: 'claude', apiModel: 'claude-opus-4-7' },
   { id: 'claude-sonnet-4-6', name: 'Anthropic Claude Sonnet 4', provider: 'claude', apiModel: 'claude-sonnet-4-6' },
   { id: 'claude-haiku-4-5', name: 'Anthropic Claude Haiku 4.5', provider: 'claude', apiModel: 'claude-haiku-4-5-20251001' },
-  { id: 'ollama-local', name: 'Ollama (Local)', provider: 'ollama', apiModel: 'ollama' },
+  { id: 'local-openai', name: 'Local (Ollama / LM Studio / llama.cpp)', provider: 'local', apiModel: 'local' },
 ];
 
 export interface PDFToMDSettings {
-  provider: 'openai' | 'qwen' | 'gemini' | 'claude' | 'ollama';
+  provider: 'openai' | 'qwen' | 'gemini' | 'claude' | 'local';
   selectedModelId: string;
   openaiModel: string;
   qwenModel: string;
   customBaseUrl: string;
   customModelName: string;
-  ollamaBaseUrl: string;
-  ollamaModel: string;
+  localBaseUrl: string;
+  localModel: string;
   dpi: number;
   timeout: number;
   conflictResolution: 'overwrite' | 'skip' | 'timestamp' | 'by-model';
@@ -49,8 +49,8 @@ export const DEFAULT_SETTINGS: PDFToMDSettings = {
   qwenModel: 'qwen-vl-max',
   customBaseUrl: '',
   customModelName: '',
-  ollamaBaseUrl: 'http://localhost:11434/v1',
-  ollamaModel: 'glm-ocr:bf16',
+  localBaseUrl: 'http://localhost:11434/v1',
+  localModel: 'glm-ocr:bf16',
   dpi: 150,
   timeout: 60,
   conflictResolution: 'by-model',
@@ -68,8 +68,8 @@ export class PDFToMDSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    // 🔒 Security notice (hidden for Ollama — no key needed)
-    if (this.plugin.settings.provider !== 'ollama') {
+    // 🔒 Security notice (hidden for local — no key needed)
+    if (this.plugin.settings.provider !== 'local') {
       const securityNotice = containerEl.createDiv('pdf-to-md-security-notice');
       const noticeText = Platform.isIosApp
         ? '<strong>🔒 Security:</strong> API keys are stored securely in <strong>iOS Keychain</strong> and are not synced.'
@@ -212,47 +212,80 @@ export class PDFToMDSettingTab extends PluginSettingTab {
           'ANTHROPIC_API_KEY'
         );
         break;
-      case 'ollama':
-        this.addOllamaSettings();
+      case 'local':
+        this.addLocalSettings();
         break;
     }
   }
 
-  private addOllamaSettings(): void {
+  private addLocalSettings(): void {
     const { containerEl } = this;
 
     new Setting(containerEl)
-      .setName('Ollama Base URL')
-      .setDesc('URL of your local Ollama instance (default: http://localhost:11434/v1)')
+      .setName('Base URL')
+      .setDesc('OpenAI-compatible endpoint (Ollama, LM Studio, llama.cpp, vLLM, etc.)')
       .addText(text =>
         text
           .setPlaceholder('http://localhost:11434/v1')
-          .setValue(this.plugin.settings.ollamaBaseUrl)
+          .setValue(this.plugin.settings.localBaseUrl)
           .onChange(async value => {
-            this.plugin.settings.ollamaBaseUrl = value.trim() || 'http://localhost:11434/v1';
+            this.plugin.settings.localBaseUrl = value.trim() || 'http://localhost:11434/v1';
             await this.plugin.saveSettings();
           })
       );
 
     new Setting(containerEl)
-      .setName('Ollama Model')
-      .setDesc('Name of the vision model to use (must support image input, e.g. gemma3:4b, llava, llama3.2-vision)')
+      .setName('Model')
+      .setDesc('Vision model name (must support image input, e.g. gemma3:4b, llava, llama3.2-vision)')
       .addText(text =>
         text
           .setPlaceholder('gemma3:4b')
-          .setValue(this.plugin.settings.ollamaModel)
+          .setValue(this.plugin.settings.localModel)
           .onChange(async value => {
-            this.plugin.settings.ollamaModel = value.trim() || 'gemma3:4b';
+            this.plugin.settings.localModel = value.trim() || 'gemma3:4b';
             await this.plugin.saveSettings();
           })
       );
 
-    new Setting(containerEl)
-      .setName('Ollama Status')
-      .setDesc('No API key required — Ollama runs locally')
-      .addText(text =>
-        text.setValue('✓ Local — no key needed').setDisabled(true)
-      );
+    if (Platform.isIosApp) {
+      const secretStorage = (this.app as any).secretStorage;
+      if (secretStorage) {
+        const isConfigured = !!this.plugin.apiKeys.get('local');
+        new Setting(containerEl)
+          .setName('API Key')
+          .setDesc('Optional — stored securely in iOS Keychain (not synced). Leave empty for local endpoints.')
+          .addText(text => {
+            text.inputEl.type = 'password';
+            text.setPlaceholder(isConfigured ? '••••••••••••••••' : 'Enter API key (optional)...')
+              .onChange(async value => {
+                const val = value.trim();
+                this.plugin.apiKeys.set('local', val);
+                try {
+                  if (val) {
+                    await secretStorage.setSecret('pdf-to-md-local-key', val);
+                  } else {
+                    await secretStorage.deleteSecret('pdf-to-md-local-key');
+                  }
+                } catch (e) {
+                  console.error('Failed to save local API key to Keychain:', e);
+                  new Notice('Failed to save API key to Keychain', 5000);
+                }
+              });
+          });
+      }
+    } else if (!Platform.isAndroidApp) {
+      // Desktop only: show optional env var status
+      const envValue = this.getEnvValue('LOCAL_LLM_API_KEY');
+      new Setting(containerEl)
+        .setName('API Key (Optional)')
+        .setDesc('Set environment variable `LOCAL_LLM_API_KEY` if your endpoint requires authentication. Not needed for local servers.')
+        .addText(text =>
+          text
+            .setValue(envValue ? '✓ Configured' : '✗ Not set (optional)')
+            .setDisabled(true)
+        );
+    }
+    // Android: no API key UI
   }
 
   private addProviderSetting(
