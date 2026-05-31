@@ -66,7 +66,7 @@ export default class PDFToMDPlugin extends Plugin {
     if (Platform.isIosApp) {
       const secretStorage = (this.app as any).secretStorage;
       if (secretStorage) {
-        const providers = ['openai', 'qwen', 'gemini', 'claude'];
+        const providers = ['openai', 'qwen', 'gemini', 'claude', 'local'];
         for (const provider of providers) {
           try {
             const key = await secretStorage.getSecret(`pdf-to-md-${provider}-key`);
@@ -82,7 +82,7 @@ export default class PDFToMDPlugin extends Plugin {
       }
     }
 
-    const envVars = {
+    const envVars: Record<string, string> = {
       'openai': 'OPENAI_API_KEY',
       'qwen': 'DASHSCOPE_API_KEY',
       'gemini': 'GEMINI_API_KEY',
@@ -97,6 +97,13 @@ export default class PDFToMDPlugin extends Plugin {
       } else {
         console.warn(`⚠️ ${envVar} not found in environment variables`);
       }
+    }
+
+    // LOCAL_LLM_API_KEY is optional — no warning if absent
+    const localKey = this.getEnvValue('LOCAL_LLM_API_KEY');
+    if (localKey) {
+      this.apiKeys.set('local', localKey);
+      console.log('✓ Loaded LOCAL_LLM_API_KEY');
     }
   }
 
@@ -126,9 +133,9 @@ export default class PDFToMDPlugin extends Plugin {
         return;
       }
 
-      // Check if API key is configured (Ollama is local — no key needed)
-      const apiKey = this.settings.provider === 'ollama' ? '' : (this.getApiKey(this.settings.provider) ?? '');
-      if (!apiKey && this.settings.provider !== 'ollama') {
+      // Check if API key is configured (local provider key is optional)
+      const apiKey = this.getApiKey(this.settings.provider) ?? '';
+      if (!apiKey && this.settings.provider !== 'local') {
         const envVarMap: Record<string, string> = {
           openai: 'OPENAI_API_KEY',
           qwen: 'DASHSCOPE_API_KEY',
@@ -251,8 +258,8 @@ export default class PDFToMDPlugin extends Plugin {
     if (selectedModel.provider === 'qwen') {
       return 'qwen';
     }
-    if (selectedModel.provider === 'ollama') {
-      return settings.ollamaModel.replace(':', '-');
+    if (selectedModel.provider === 'local') {
+      return settings.localModel.replace(':', '-');
     }
     return selectedModel.id;
   }
@@ -300,13 +307,13 @@ export default class PDFToMDPlugin extends Plugin {
       case 'claude':
         return new AnthropicProvider({ apiKey: apiKey, model: modelName });
 
-      case 'ollama':
+      case 'local':
         return new OpenAICompatibleProvider(
           {
-            apiKey: '',
-            model: settings.ollamaModel || 'gemma3:4b',
+            apiKey: apiKey || '',
+            model: settings.localModel || 'glm-ocr:bf16',
           },
-          settings.ollamaBaseUrl || 'http://localhost:11434/v1'
+          settings.localBaseUrl || 'http://localhost:11434/v1'
         );
 
       default:
@@ -315,8 +322,18 @@ export default class PDFToMDPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-    
+    const data = await this.loadData();
+
+    // Migrate: rename 'ollama' provider to 'local'
+    if (data?.provider === 'ollama') {
+      data.provider = 'local';
+      if (data.selectedModelId === 'ollama-local') data.selectedModelId = 'local-openai';
+      if (data.ollamaBaseUrl) data.localBaseUrl = data.ollamaBaseUrl;
+      if (data.ollamaModel) data.localModel = data.ollamaModel;
+    }
+
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
+
     // Migrate old settings if selectedModelId is missing
     if (!this.settings.selectedModelId) {
       if (this.settings.provider === 'openai') {
@@ -347,8 +364,8 @@ export default class PDFToMDPlugin extends Plugin {
         return;
       }
 
-      const apiKey = this.settings.provider === 'ollama' ? '' : (this.getApiKey(this.settings.provider) ?? '');
-      if (!apiKey && this.settings.provider !== 'ollama') {
+      const apiKey = this.getApiKey(this.settings.provider) ?? '';
+      if (!apiKey && this.settings.provider !== 'local') {
         new Notice('❌ API Key not configured');
         return;
       }
@@ -424,8 +441,8 @@ export default class PDFToMDPlugin extends Plugin {
       const imageData = await this.app.vault.readBinary(imageFile);
 
       // Check API key
-      const apiKey = this.settings.provider === 'ollama' ? '' : (this.getApiKey(this.settings.provider) ?? '');
-      if (!apiKey && this.settings.provider !== 'ollama') {
+      const apiKey = this.getApiKey(this.settings.provider) ?? '';
+      if (!apiKey && this.settings.provider !== 'local') {
         new Notice('❌ API Key not configured');
         return;
       }

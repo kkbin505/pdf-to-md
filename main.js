@@ -32074,7 +32074,7 @@ var MODEL_OPTIONS = [
   { id: "claude-opus-4-7", name: "Anthropic Claude Opus 4", provider: "claude", apiModel: "claude-opus-4-7" },
   { id: "claude-sonnet-4-6", name: "Anthropic Claude Sonnet 4", provider: "claude", apiModel: "claude-sonnet-4-6" },
   { id: "claude-haiku-4-5", name: "Anthropic Claude Haiku 4.5", provider: "claude", apiModel: "claude-haiku-4-5-20251001" },
-  { id: "ollama-local", name: "Ollama (Local)", provider: "ollama", apiModel: "ollama" }
+  { id: "local-openai", name: "Local (Ollama / LM Studio / llama.cpp)", provider: "local", apiModel: "local" }
 ];
 var DEFAULT_SETTINGS = {
   provider: "qwen",
@@ -32083,8 +32083,8 @@ var DEFAULT_SETTINGS = {
   qwenModel: "qwen-vl-max",
   customBaseUrl: "",
   customModelName: "",
-  ollamaBaseUrl: "http://localhost:11434/v1",
-  ollamaModel: "glm-ocr:bf16",
+  localBaseUrl: "http://localhost:11434/v1",
+  localModel: "glm-ocr:bf16",
   dpi: 150,
   timeout: 60,
   conflictResolution: "by-model"
@@ -32097,7 +32097,7 @@ var PDFToMDSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    if (this.plugin.settings.provider !== "ollama") {
+    if (this.plugin.settings.provider !== "local") {
       const securityNotice = containerEl.createDiv("pdf-to-md-security-notice");
       const noticeText = import_obsidian.Platform.isIosApp ? "<strong>\u{1F512} Security:</strong> API keys are stored securely in <strong>iOS Keychain</strong> and are not synced." : "<strong>\u{1F512} Security:</strong> API keys are read from environment variables only. <strong>No API keys are stored on disk.</strong>";
       securityNotice.innerHTML = `
@@ -32168,22 +32168,47 @@ var PDFToMDSettingTab = class extends import_obsidian.PluginSettingTab {
       case "claude":
         this.addProviderSetting("claude", "Anthropic API Key Status", "Get from https://console.anthropic.com/settings/keys", "ANTHROPIC_API_KEY");
         break;
-      case "ollama":
-        this.addOllamaSettings();
+      case "local":
+        this.addLocalSettings();
         break;
     }
   }
-  addOllamaSettings() {
+  addLocalSettings() {
     const { containerEl } = this;
-    new import_obsidian.Setting(containerEl).setName("Ollama Base URL").setDesc("URL of your local Ollama instance (default: http://localhost:11434/v1)").addText((text) => text.setPlaceholder("http://localhost:11434/v1").setValue(this.plugin.settings.ollamaBaseUrl).onChange(async (value) => {
-      this.plugin.settings.ollamaBaseUrl = value.trim() || "http://localhost:11434/v1";
+    new import_obsidian.Setting(containerEl).setName("Base URL").setDesc("OpenAI-compatible endpoint (Ollama, LM Studio, llama.cpp, vLLM, etc.)").addText((text) => text.setPlaceholder("http://localhost:11434/v1").setValue(this.plugin.settings.localBaseUrl).onChange(async (value) => {
+      this.plugin.settings.localBaseUrl = value.trim() || "http://localhost:11434/v1";
       await this.plugin.saveSettings();
     }));
-    new import_obsidian.Setting(containerEl).setName("Ollama Model").setDesc("Name of the vision model to use (must support image input, e.g. gemma3:4b, llava, llama3.2-vision)").addText((text) => text.setPlaceholder("gemma3:4b").setValue(this.plugin.settings.ollamaModel).onChange(async (value) => {
-      this.plugin.settings.ollamaModel = value.trim() || "gemma3:4b";
+    new import_obsidian.Setting(containerEl).setName("Model").setDesc("Vision model name (must support image input, e.g. gemma3:4b, llava, llama3.2-vision)").addText((text) => text.setPlaceholder("gemma3:4b").setValue(this.plugin.settings.localModel).onChange(async (value) => {
+      this.plugin.settings.localModel = value.trim() || "gemma3:4b";
       await this.plugin.saveSettings();
     }));
-    new import_obsidian.Setting(containerEl).setName("Ollama Status").setDesc("No API key required \u2014 Ollama runs locally").addText((text) => text.setValue("\u2713 Local \u2014 no key needed").setDisabled(true));
+    if (import_obsidian.Platform.isIosApp) {
+      const secretStorage = this.app.secretStorage;
+      if (secretStorage) {
+        const isConfigured = !!this.plugin.apiKeys.get("local");
+        new import_obsidian.Setting(containerEl).setName("API Key").setDesc("Optional \u2014 stored securely in iOS Keychain (not synced). Leave empty for local endpoints.").addText((text) => {
+          text.inputEl.type = "password";
+          text.setPlaceholder(isConfigured ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" : "Enter API key (optional)...").onChange(async (value) => {
+            const val = value.trim();
+            this.plugin.apiKeys.set("local", val);
+            try {
+              if (val) {
+                await secretStorage.setSecret("pdf-to-md-local-key", val);
+              } else {
+                await secretStorage.deleteSecret("pdf-to-md-local-key");
+              }
+            } catch (e) {
+              console.error("Failed to save local API key to Keychain:", e);
+              new import_obsidian.Notice("Failed to save API key to Keychain", 5e3);
+            }
+          });
+        });
+      }
+    } else if (!import_obsidian.Platform.isAndroidApp) {
+      const envValue = this.getEnvValue("LOCAL_LLM_API_KEY");
+      new import_obsidian.Setting(containerEl).setName("API Key (Optional)").setDesc("Set environment variable `LOCAL_LLM_API_KEY` if your endpoint requires authentication. Not needed for local servers.").addText((text) => text.setValue(envValue ? "\u2713 Configured" : "\u2717 Not set (optional)").setDisabled(true));
+    }
   }
   addProviderSetting(provider, keyLabel, keyDesc, envVarName) {
     const { containerEl } = this;
@@ -32598,7 +32623,7 @@ var PDFToMDPlugin = class extends import_obsidian5.Plugin {
     if (import_obsidian5.Platform.isIosApp) {
       const secretStorage = this.app.secretStorage;
       if (secretStorage) {
-        const providers = ["openai", "qwen", "gemini", "claude"];
+        const providers = ["openai", "qwen", "gemini", "claude", "local"];
         for (const provider of providers) {
           try {
             const key = await secretStorage.getSecret(`pdf-to-md-${provider}-key`);
@@ -32628,6 +32653,11 @@ var PDFToMDPlugin = class extends import_obsidian5.Plugin {
         console.warn(`\u26A0\uFE0F ${envVar} not found in environment variables`);
       }
     }
+    const localKey = this.getEnvValue("LOCAL_LLM_API_KEY");
+    if (localKey) {
+      this.apiKeys.set("local", localKey);
+      console.log("\u2713 Loaded LOCAL_LLM_API_KEY");
+    }
   }
   getEnvValue(envVarName) {
     try {
@@ -32650,8 +32680,8 @@ var PDFToMDPlugin = class extends import_obsidian5.Plugin {
         new import_obsidian5.Notice("\u274C Unsupported file type. Only PDF, PNG, JPG, JPEG, and WebP are supported.", 5e3);
         return;
       }
-      const apiKey = this.settings.provider === "ollama" ? "" : this.getApiKey(this.settings.provider) ?? "";
-      if (!apiKey && this.settings.provider !== "ollama") {
+      const apiKey = this.getApiKey(this.settings.provider) ?? "";
+      if (!apiKey && this.settings.provider !== "local") {
         const envVarMap = {
           openai: "OPENAI_API_KEY",
           qwen: "DASHSCOPE_API_KEY",
@@ -32753,8 +32783,8 @@ Then restart Obsidian.`, 1e4);
     if (selectedModel.provider === "qwen") {
       return "qwen";
     }
-    if (selectedModel.provider === "ollama") {
-      return settings.ollamaModel.replace(":", "-");
+    if (selectedModel.provider === "local") {
+      return settings.localModel.replace(":", "-");
     }
     return selectedModel.id;
   }
@@ -32786,17 +32816,27 @@ Then restart Obsidian.`, 1e4);
         }, "https://generativelanguage.googleapis.com/v1beta/openai/");
       case "claude":
         return new AnthropicProvider({ apiKey, model: modelName });
-      case "ollama":
+      case "local":
         return new OpenAICompatibleProvider({
-          apiKey: "",
-          model: settings.ollamaModel || "gemma3:4b"
-        }, settings.ollamaBaseUrl || "http://localhost:11434/v1");
+          apiKey: apiKey || "",
+          model: settings.localModel || "glm-ocr:bf16"
+        }, settings.localBaseUrl || "http://localhost:11434/v1");
       default:
         throw new Error(`Unknown provider: ${settings.provider}`);
     }
   }
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const data = await this.loadData();
+    if (data?.provider === "ollama") {
+      data.provider = "local";
+      if (data.selectedModelId === "ollama-local")
+        data.selectedModelId = "local-openai";
+      if (data.ollamaBaseUrl)
+        data.localBaseUrl = data.ollamaBaseUrl;
+      if (data.ollamaModel)
+        data.localModel = data.ollamaModel;
+    }
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
     if (!this.settings.selectedModelId) {
       if (this.settings.provider === "openai") {
         const matchingModel = MODEL_OPTIONS.find((m) => m.provider === "openai" && m.apiModel === this.settings.openaiModel);
@@ -32819,8 +32859,8 @@ Then restart Obsidian.`, 1e4);
         new import_obsidian5.Notice("\u274C No active editor found");
         return;
       }
-      const apiKey = this.settings.provider === "ollama" ? "" : this.getApiKey(this.settings.provider) ?? "";
-      if (!apiKey && this.settings.provider !== "ollama") {
+      const apiKey = this.getApiKey(this.settings.provider) ?? "";
+      if (!apiKey && this.settings.provider !== "local") {
         new import_obsidian5.Notice("\u274C API Key not configured");
         return;
       }
@@ -32874,8 +32914,8 @@ Then restart Obsidian.`, 1e4);
         return;
       }
       const imageData = await this.app.vault.readBinary(imageFile);
-      const apiKey = this.settings.provider === "ollama" ? "" : this.getApiKey(this.settings.provider) ?? "";
-      if (!apiKey && this.settings.provider !== "ollama") {
+      const apiKey = this.getApiKey(this.settings.provider) ?? "";
+      if (!apiKey && this.settings.provider !== "local") {
         new import_obsidian5.Notice("\u274C API Key not configured");
         return;
       }
